@@ -6,8 +6,11 @@ import { FolderCard } from "@/components/FolderCard";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { uploadFiles } from "@/lib/uploadthing";
+import { MediaThumb } from "@/components/MediaThumb";
 import { motion, AnimatePresence } from "framer-motion";
 import { useImage } from "@/context/ImageContext";
+import { useAbout, AboutContent } from "@/context/AboutContext";
 import {
   DndContext,
   closestCenter,
@@ -28,6 +31,25 @@ import {
   useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+
+async function uploadMediaFile(file: File): Promise<string> {
+  if (file.type.startsWith("video/")) {
+    const [uploaded] = await uploadFiles("mediaUploader", { files: [file] });
+    return uploaded.ufsUrl;
+  }
+
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Math.random()}.${fileExt}`;
+  const { error: uploadError } = await supabase.storage
+    .from('wallpaper-images')
+    .upload(fileName, file);
+  if (uploadError) throw uploadError;
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('wallpaper-images')
+    .getPublicUrl(fileName);
+  return publicUrl;
+}
 
 function SortableFolderWrapper({
   folder,
@@ -115,7 +137,7 @@ function SortableImage({ src, onDelete, isSelectMode, isSelected, onToggleSelect
           }
         }}
       >
-        <img src={src} alt="image" className={`w-full h-full rounded-xl object-cover shadow-sm transition-all ${isSelected ? 'border-blue-500 border-4 scale-95' : 'border border-black/5 dark:border-white/10 hover:opacity-90 cursor-pointer'}`} />
+        <MediaThumb src={src} className={`w-full h-full rounded-xl object-cover shadow-sm transition-all ${isSelected ? 'border-blue-500 border-4 scale-95' : 'border border-black/5 dark:border-white/10 hover:opacity-90 cursor-pointer'}`} />
         {isSelectMode && (
           <div className={`absolute top-2 left-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-500 border-blue-500' : 'bg-black/20 border-white backdrop-blur-md'}`}>
             {isSelected && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-4 h-4 text-white stroke-[3]"><polyline points="20 6 9 17 4 12"></polyline></svg>}
@@ -179,17 +201,7 @@ function CreatePostModal({
     try {
       const uploadedUrls: string[] = [];
       for (const file of postImages) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from('wallpaper-images')
-          .upload(fileName, file);
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('wallpaper-images')
-          .getPublicUrl(fileName);
-        uploadedUrls.push(publicUrl);
+        uploadedUrls.push(await uploadMediaFile(file));
       }
 
       const targetFolderId = selectedCollectionId;
@@ -288,14 +300,18 @@ function CreatePostModal({
             <input
               type="file"
               multiple
-              accept="image/*"
+              accept="image/*,video/*"
               className="hidden"
               ref={fileInputRef}
               onChange={handleFileChange}
             />
             {previewUrls.map((url, i) => (
               <div key={i} className="relative aspect-square group">
-                <img src={url} alt="preview" className="w-full h-full rounded-xl object-cover shadow-sm border border-black/5 dark:border-white/10" />
+                {postImages[i]?.type.startsWith("video/") ? (
+                  <video src={url} className="w-full h-full rounded-xl object-cover shadow-sm border border-black/5 dark:border-white/10" muted loop playsInline autoPlay />
+                ) : (
+                  <img src={url} alt="preview" className="w-full h-full rounded-xl object-cover shadow-sm border border-black/5 dark:border-white/10" />
+                )}
                 <button
                   onClick={() => removeImage(i)}
                   className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-all hover:scale-110 shadow-md"
@@ -330,9 +346,143 @@ function CreatePostModal({
   );
 }
 
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 p-3 bg-zinc-50 dark:bg-zinc-800 rounded-2xl">
+      <label className="text-[15px] text-[#444] dark:text-zinc-300 font-semibold">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+const fieldInputClass = "w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-600 transition-shadow text-black dark:text-white resize-none";
+
+function AboutEditModal({
+  about,
+  updateAbout,
+  onClose,
+}: {
+  about: AboutContent;
+  updateAbout: (content: AboutContent) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [leadText, setLeadText] = useState(about.leadText);
+  const [skillsText, setSkillsText] = useState(about.skills.join(", "));
+  const [paragraph2, setParagraph2] = useState(about.paragraph2);
+  const [paragraph3, setParagraph3] = useState(about.paragraph3);
+  const [toolkit, setToolkit] = useState(about.toolkit);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await updateAbout({
+        leadText: leadText.trim(),
+        skills: skillsText.split(",").map((s) => s.trim()).filter(Boolean),
+        paragraph2: paragraph2.trim(),
+        paragraph3: paragraph3.trim(),
+        toolkit: toolkit.trim(),
+      });
+      onClose();
+    } catch (error: unknown) {
+      console.error(error);
+      alert("Failed to save About content: " + (error as Error).message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-300"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isSaving) onClose();
+      }}
+    >
+      <div className="bg-white dark:bg-zinc-900 p-8 rounded-[24px] w-full max-w-[600px] shadow-[0_24px_48px_rgba(0,0,0,0.2)] animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="flex justify-between items-center mb-6 shrink-0">
+          <h3 className="text-[22px] text-[#111] dark:text-white font-bold tracking-tight">Edit About Section</h3>
+          <button onClick={() => !isSaving && onClose()} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors shrink-0">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-5 h-5 text-zinc-600 dark:text-zinc-300">
+              <line x1="18" y1="6" x2="6" y2="18" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"></line>
+              <line x1="6" y1="6" x2="18" y2="18" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"></line>
+            </svg>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+          <Field label="Lead Sentence">
+            <textarea
+              value={leadText}
+              onChange={(e) => setLeadText(e.target.value)}
+              rows={2}
+              className={fieldInputClass}
+            />
+          </Field>
+
+          <Field label="Skills (comma-separated)">
+            <input
+              type="text"
+              value={skillsText}
+              onChange={(e) => setSkillsText(e.target.value)}
+              className={fieldInputClass}
+              placeholder="3D Animation, Storyboarding, Concept Art"
+            />
+          </Field>
+
+          <Field label="Paragraph 2">
+            <textarea
+              value={paragraph2}
+              onChange={(e) => setParagraph2(e.target.value)}
+              rows={4}
+              className={fieldInputClass}
+            />
+          </Field>
+
+          <Field label="Paragraph 3">
+            <textarea
+              value={paragraph3}
+              onChange={(e) => setParagraph3(e.target.value)}
+              rows={4}
+              className={fieldInputClass}
+            />
+          </Field>
+
+          <Field label="Toolkit (comma-separated)">
+            <input
+              type="text"
+              value={toolkit}
+              onChange={(e) => setToolkit(e.target.value)}
+              className={fieldInputClass}
+              placeholder="Blender 3D, Unreal Engine, Maya"
+            />
+          </Field>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-6 mt-6 border-t border-zinc-100 dark:border-zinc-800 shrink-0">
+          <button
+            onClick={() => !isSaving && onClose()}
+            className="px-6 py-3 rounded-[14px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-semibold text-[15px] hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="px-6 py-3 rounded-[14px] bg-[#111] dark:bg-white text-white dark:text-black font-semibold text-[15px] hover:bg-[#333] dark:hover:bg-zinc-200 hover:-translate-y-[1px] hover:shadow-[0_4px_12px_rgba(0,0,0,0.15)] transition-all disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {isSaving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const { folders, addFolder, updateFolder, removeFolder, reorderFolders } = useFolders();
+  const { about, updateAbout } = useAbout();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<Folder | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -340,6 +490,7 @@ export default function AdminPage() {
   // FAB State
   const [isFabOpen, setIsFabOpen] = useState(false);
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
 
   // Folder Select Mode State
@@ -356,12 +507,14 @@ export default function AdminPage() {
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
 
   const handleCloseEditModal = () => {
     setSelectedFolder(null);
     setIsSelectMode(false);
     setSelectedImages([]);
     setIsMoveModalOpen(false);
+    setIsCopyModalOpen(false);
   };
 
   useEffect(() => {
@@ -415,23 +568,11 @@ export default function AdminPage() {
       const uploadedImageUrls: string[] = [];
 
       for (const file of files) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random()}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('wallpaper-images')
-          .upload(fileName, file);
-
-        if (uploadError) {
-          console.error("Error uploading image: ", uploadError);
-          continue;
+        try {
+          uploadedImageUrls.push(await uploadMediaFile(file));
+        } catch (uploadError) {
+          console.error("Error uploading media: ", uploadError);
         }
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('wallpaper-images')
-          .getPublicUrl(fileName);
-
-        uploadedImageUrls.push(publicUrl);
       }
 
       const finalImages = uploadedImageUrls.length > 0 ? uploadedImageUrls : images.length > 0 ? images : [
@@ -511,23 +652,11 @@ export default function AdminPage() {
       const uploadedImageUrls: string[] = [];
 
       for (const file of filesArray) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random()}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('wallpaper-images')
-          .upload(fileName, file);
-
-        if (uploadError) {
-          console.error("Error uploading image: ", uploadError);
-          continue;
+        try {
+          uploadedImageUrls.push(await uploadMediaFile(file));
+        } catch (uploadError) {
+          console.error("Error uploading media: ", uploadError);
         }
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('wallpaper-images')
-          .getPublicUrl(fileName);
-
-        uploadedImageUrls.push(publicUrl);
       }
 
       if (uploadedImageUrls.length > 0) {
@@ -662,6 +791,28 @@ export default function AdminPage() {
     } catch (error: unknown) {
       console.error(error);
       alert("Failed to move images: " + (error as Error).message);
+    }
+  };
+
+  const handleBulkCopy = async (targetFolderId: string) => {
+    if (selectedImages.length === 0 || !selectedFolder) return;
+    try {
+      const targetFolder = folders.find(f => f.id === targetFolderId);
+      if (!targetFolder) return;
+
+      const newTargetImages = [...targetFolder.images, ...selectedImages];
+
+      const { error: targetError } = await supabase.from('folders').update({ images: newTargetImages }).eq('id', targetFolderId);
+      if (targetError) throw targetError;
+
+      updateFolder(targetFolderId, { ...targetFolder, images: newTargetImages });
+
+      setSelectedImages([]);
+      setIsSelectMode(false);
+      setIsCopyModalOpen(false);
+    } catch (error: unknown) {
+      console.error(error);
+      alert("Failed to copy images: " + (error as Error).message);
     }
   };
 
@@ -809,6 +960,13 @@ export default function AdminPage() {
               >
                 Create Collection
               </button>
+
+              <button
+                onClick={() => { setIsFabOpen(false); setIsAboutModalOpen(true); }}
+                className="bg-[#DCFCE7] dark:bg-emerald-900/30 text-[#16A34A] dark:text-emerald-400 font-bold text-[14px] px-5 py-2.5 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] hover:opacity-90 transition-opacity"
+              >
+                Edit About
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
@@ -946,7 +1104,7 @@ export default function AdminPage() {
 
             <div className="flex flex-col gap-3 mb-8 p-3 bg-zinc-50 dark:bg-zinc-800 rounded-2xl">
               <div className="flex items-center justify-between">
-                <label className="text-[15px] text-[#444] dark:text-zinc-300 font-semibold">Images</label>
+                <label className="text-[15px] text-[#444] dark:text-zinc-300 font-semibold">Images &amp; Videos</label>
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   className="px-3 py-1.5 bg-zinc-200 dark:bg-zinc-700 text-sm rounded-lg font-medium hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-colors"
@@ -956,7 +1114,7 @@ export default function AdminPage() {
                 <input
                   type="file"
                   multiple
-                  accept="image/*"
+                  accept="image/*,video/*"
                   className="hidden"
                   ref={fileInputRef}
                   onChange={handleFileChange}
@@ -966,7 +1124,11 @@ export default function AdminPage() {
                 <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar mt-2 pt-2">
                   {images.map((src, i) => (
                     <div key={i} className="relative flex-shrink-0 group">
-                      <img src={src} alt="upload" className="w-14 h-14 rounded-xl object-cover shadow-sm border border-black/5 dark:border-white/10" />
+                      {files[i]?.type.startsWith("video/") ? (
+                        <video src={src} className="w-14 h-14 rounded-xl object-cover shadow-sm border border-black/5 dark:border-white/10" muted loop playsInline autoPlay />
+                      ) : (
+                        <img src={src} alt="upload" className="w-14 h-14 rounded-xl object-cover shadow-sm border border-black/5 dark:border-white/10" />
+                      )}
                       <button
                         onClick={() => removeImage(i)}
                         className="absolute -top-1.5 -right-1.5 bg-black/70 dark:bg-white/80 text-white dark:text-black rounded-full p-1 opacity-0 group-hover:opacity-100 transition-all hover:scale-110 backdrop-blur-md shadow-md"
@@ -1006,11 +1168,11 @@ export default function AdminPage() {
         <div
           className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-300"
           onClick={(e) => {
-            if (e.target === e.currentTarget && !isMoveModalOpen) handleCloseEditModal();
+            if (e.target === e.currentTarget && !isMoveModalOpen && !isCopyModalOpen) handleCloseEditModal();
           }}
         >
-          <div className="bg-white dark:bg-zinc-900 p-8 rounded-[24px] w-full max-w-[500px] shadow-[0_24px_48px_rgba(0,0,0,0.2)] animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar flex flex-col">
-            <div className="flex justify-between items-center mb-6">
+          <div className="bg-white dark:bg-zinc-900 p-8 rounded-[24px] w-full max-w-[500px] shadow-[0_24px_48px_rgba(0,0,0,0.2)] animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center mb-6 shrink-0">
               <div className="flex items-center gap-3">
                 <input
                   type="color"
@@ -1046,7 +1208,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="flex-1 min-h-[300px]">
+            <div className="flex-1 min-h-[300px] overflow-y-auto custom-scrollbar">
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
@@ -1072,7 +1234,7 @@ export default function AdminPage() {
                   <input
                     type="file"
                     multiple
-                    accept="image/*"
+                    accept="image/*,video/*"
                     className="hidden"
                     ref={editFileInputRef}
                     onChange={handleUploadAdditionalImages}
@@ -1102,7 +1264,7 @@ export default function AdminPage() {
               )}
             </div>
 
-            <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center relative">
+            <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center relative shrink-0">
               {!isSelectMode ? (
                 <>
                   <button
@@ -1121,18 +1283,25 @@ export default function AdminPage() {
               ) : (
                 <>
                   <button
-                    onClick={() => { setIsSelectMode(false); setSelectedImages([]); setIsMoveModalOpen(false); }}
+                    onClick={() => { setIsSelectMode(false); setSelectedImages([]); setIsMoveModalOpen(false); setIsCopyModalOpen(false); }}
                     className="px-6 py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-semibold text-sm hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                   >
                     Cancel
                   </button>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setIsMoveModalOpen(!isMoveModalOpen)}
+                      onClick={() => { setIsCopyModalOpen(false); setIsMoveModalOpen(!isMoveModalOpen); }}
                       disabled={selectedImages.length === 0}
                       className="px-4 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold text-sm hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors disabled:opacity-50"
                     >
                       Move ({selectedImages.length})
+                    </button>
+                    <button
+                      onClick={() => { setIsMoveModalOpen(false); setIsCopyModalOpen(!isCopyModalOpen); }}
+                      disabled={selectedImages.length === 0}
+                      className="px-4 py-2.5 rounded-xl bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 font-semibold text-sm hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-colors disabled:opacity-50"
+                    >
+                      Copy ({selectedImages.length})
                     </button>
                     <button
                       onClick={handleBulkDelete}
@@ -1163,6 +1332,27 @@ export default function AdminPage() {
                       </div>
                     </div>
                   )}
+                  {/* Copy Modal */}
+                  {isCopyModalOpen && (
+                    <div className="absolute bottom-full right-0 mb-2 w-64 bg-white dark:bg-zinc-800 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-700 p-2 z-[101]">
+                      <div className="text-xs font-semibold text-zinc-500 mb-2 px-2 pt-1">Copy to...</div>
+                      <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                        {folders.filter(f => f.id !== selectedFolder.id).map(f => (
+                          <button
+                            key={f.id}
+                            onClick={() => handleBulkCopy(f.id)}
+                            className="w-full text-left px-3 py-2 text-sm font-medium hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: f.color }}></div>
+                            {f.name}
+                          </button>
+                        ))}
+                        {folders.filter(f => f.id !== selectedFolder.id).length === 0 && (
+                          <div className="px-3 py-2 text-sm text-zinc-500">No other collections available.</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -1177,6 +1367,15 @@ export default function AdminPage() {
           folders={folders}
           addFolder={addFolder}
           updateFolder={updateFolder}
+        />
+      )}
+
+      {/* Edit About Modal */}
+      {isAboutModalOpen && (
+        <AboutEditModal
+          about={about}
+          updateAbout={updateAbout}
+          onClose={() => setIsAboutModalOpen(false)}
         />
       )}
     </div>

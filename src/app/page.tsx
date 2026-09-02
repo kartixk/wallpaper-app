@@ -6,12 +6,13 @@ import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Camera, Play, Mail, Code, X,
-  Volume2, VolumeX, Flame, Sparkles, Pencil, Tv,
+  Volume2, VolumeX, Flame, Sparkles, Tv,
   ChevronLeft, ChevronRight, ExternalLink
 } from "lucide-react";
 import StickerPeel from "./components/StickerPeel";
 import SpotlightNavbar from "./components/SpotlightNavbar";
 import doodle1 from "./doodle-1.png";
+import { useAbout } from "@/context/AboutContext";
 
 // Lazy load the AnimatedDock since it's at the very bottom of the page.
 const AnimatedDock = dynamic(() => import("./components/ui/animated-dock").then(mod => mod.AnimatedDock), {
@@ -81,12 +82,88 @@ const GALLERY_DATA: GalleryItem[] = [
   },
 ];
 
+const WALL_ART_VIDEOS = [
+  { src: "/wall-art-1.mp4", label: "The Paradise", instagramUrl: "https://www.instagram.com/reel/DVhubNQkdgM/?utm_source=ig_web_copy_link&igsi=MzRlODBiNWFlZA==" },
+  { src: "/wall-art-2.mp4", label: "PEDDI", instagramUrl: "https://www.instagram.com/reel/DZJnRCfRHuY/?utm_source=ig_web_copy_link&igsi=MzRlODBiNWFlZA==" },
+];
+
 export default function Profile() {
   const smoothEase = [0.22, 1, 0.36, 1] as const;
+  const { about } = useAbout();
 
   // --- VIDEO STATE ---
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isMuted, setIsMuted] = useState(true);
+
+  // --- WALL ART CAROUSEL STATE ---
+  const [wallArtIndex, setWallArtIndex] = useState(0);
+  const [wallArtDirection, setWallArtDirection] = useState(0);
+  const wallArtContainerRef = useRef<HTMLDivElement>(null);
+  const [isWallArtInView, setIsWallArtInView] = useState(false);
+
+  const nextWallArt = useCallback(() => {
+    setWallArtDirection(1);
+    setWallArtIndex((prev) => (prev + 1) % WALL_ART_VIDEOS.length);
+  }, []);
+
+  const prevWallArt = useCallback(() => {
+    setWallArtDirection(-1);
+    setWallArtIndex((prev) => (prev - 1 + WALL_ART_VIDEOS.length) % WALL_ART_VIDEOS.length);
+  }, []);
+
+  const goToWallArt = useCallback((index: number) => {
+    setWallArtDirection(index > wallArtIndex ? 1 : -1);
+    setWallArtIndex(index);
+  }, [wallArtIndex]);
+
+  // Only start playback once the carousel scrolls into view
+  useEffect(() => {
+    const el = wallArtContainerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsWallArtInView(entry.isIntersecting),
+      { threshold: 0.4 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const el = wallArtContainerRef.current;
+    if (!el) return;
+    el.querySelectorAll("video").forEach((v) => {
+      if (isWallArtInView) v.play().catch(() => { });
+      else v.pause();
+    });
+  }, [wallArtIndex, isWallArtInView]);
+
+  // --- WALL ART MUTE STATE (starts muted, auto-unmutes after 3s spent in view) ---
+  const [wallArtMuted, setWallArtMuted] = useState(true);
+  const wallArtAutoUnmuteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wallArtUserInteracted = useRef(false);
+
+  const toggleWallArtMute = useCallback(() => {
+    wallArtUserInteracted.current = true;
+    if (wallArtAutoUnmuteTimer.current) {
+      clearTimeout(wallArtAutoUnmuteTimer.current);
+      wallArtAutoUnmuteTimer.current = null;
+    }
+    setWallArtMuted((prev) => !prev);
+  }, []);
+
+  useEffect(() => {
+    if (isWallArtInView && !wallArtUserInteracted.current) {
+      wallArtAutoUnmuteTimer.current = setTimeout(() => {
+        setWallArtMuted(false);
+      }, 3000);
+    }
+    return () => {
+      if (wallArtAutoUnmuteTimer.current) {
+        clearTimeout(wallArtAutoUnmuteTimer.current);
+        wallArtAutoUnmuteTimer.current = null;
+      }
+    };
+  }, [isWallArtInView]);
 
   // --- GALLERY MODAL STATE ---
   const [selectedCard, setSelectedCard] = useState<GalleryItem | null>(null);
@@ -176,16 +253,41 @@ export default function Profile() {
         />
 
         {/* --- HERO SECTION --- */}
-        <section id="home" className="min-h-screen flex flex-col justify-center px-6 md:px-12 max-w-7xl mx-auto relative pt-20">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-white/60 rounded-full blur-[100px] pointer-events-none -z-10" />
+        <section id="home" className="h-screen min-h-screen flex flex-col justify-center relative pt-20 overflow-hidden">
+          {/* Full-screen backdrop */}
+          <div className="absolute inset-0 -z-20">
+            <Image
+              src="/hero-image.jpeg"
+              alt=""
+              fill
+              priority
+              sizes="100vw"
+              className="object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/20 to-black/10" />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/35 via-black/5 to-transparent" />
+          </div>
 
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-16 lg:gap-12 relative z-10 w-full">
-            <motion.div initial="hidden" animate="visible" variants={stagger} className="max-w-2xl lg:w-3/5">
-              <motion.p variants={fadeUp} className="text-muted font-medium tracking-[0.2em] uppercase text-xs mb-8 flex items-center gap-4">
-                <span className="w-12 h-[1px] bg-foreground/30"></span> Visual Artist
+          {/* Logo Sticker Peel for Smart Morph */}
+          <div className="absolute top-24 right-6 md:right-12 z-30 hidden sm:block">
+            <StickerPeel
+              layoutId="app-logo"
+              imageSrc="/logo.png"
+              width={120}
+              rotate={-10}
+              peelDirection={10}
+              shadowIntensity={0.25}
+              lightingIntensity={0.05}
+            />
+          </div>
+
+          <div className="px-6 md:px-12 max-w-7xl mx-auto relative z-10 w-full -translate-y-16 md:-translate-y-20">
+            <motion.div initial="hidden" animate="visible" variants={stagger} className="max-w-2xl">
+              <motion.p variants={fadeUp} className="text-white/70 font-medium tracking-[0.2em] uppercase text-xs mb-8 flex items-center gap-4">
+                <span className="w-12 h-[1px] bg-white/40"></span> Visual Artist
               </motion.p>
 
-              <motion.h1 variants={fadeUp} className="text-7xl md:text-8xl lg:text-[10rem] font-serif tracking-tighter leading-[0.85] mb-8 relative inline-block text-foreground">
+              <motion.h1 variants={fadeUp} className="text-7xl md:text-8xl lg:text-[10rem] font-serif tracking-tighter leading-[0.85] mb-8 relative inline-block text-white drop-shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
                 Abi<span className="italic pr-2">s</span>hek
                 <div className="absolute -top-4 -right-8 md:-top-6 md:-right-16 z-30 hidden sm:block">
                   <StickerPeel
@@ -200,45 +302,120 @@ export default function Profile() {
                 </div>
               </motion.h1>
 
-              <motion.p variants={fadeUp} className="text-lg md:text-xl text-muted font-light leading-relaxed max-w-lg tracking-wide">
+              <motion.p variants={fadeUp} className="text-lg md:text-xl text-white/80 font-light leading-relaxed max-w-lg tracking-wide">
                 Specializing in pencil sketches, digital arts, 3D animations, and viral content creation. Blurring the line between physical and digital spaces.
               </motion.p>
             </motion.div>
+          </div>
+        </section>
+
+        {/* --- WALL ART SECTION --- */}
+        <section id="wall-art" className="py-32 px-6 md:px-12 max-w-7xl mx-auto relative z-10">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-100px" }}
+            variants={stagger}
+          >
+            <div className="flex flex-col md:flex-row gap-8 justify-between items-end mb-12">
+              <div>
+                <motion.div variants={fadeUp} className="relative inline-block mb-3 pl-1">
+                  <span className="absolute -top-5 left-0 font-semibold text-red-500 text-lg md:text-xl -rotate-6 select-none">
+                    Pencil
+                  </span>
+                  <span className="text-muted font-medium tracking-[0.2em] uppercase text-xs flex items-center gap-1.5">
+                    <span className="relative inline-block">
+                      Dolphin
+                      <span className="absolute left-[-6%] top-1/2 w-[112%] h-[2px] bg-red-500 -rotate-[8deg] origin-center pointer-events-none" />
+                    </span>
+                    <span>Ground</span>
+                  </span>
+                </motion.div>
+                <motion.h2 variants={fadeUp} className="text-4xl md:text-6xl font-bold uppercase tracking-tight">
+                  Vizag&apos;s Biggest Wall Art
+                </motion.h2>
+              </div>
+              <motion.p variants={fadeUp} className="text-muted max-w-sm text-base md:text-lg leading-relaxed font-light pb-2">
+                A larger-than-life mural brought to life stroke by stroke — from bare concrete to a towering canvas across the city.
+              </motion.p>
+            </div>
 
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, filter: "blur(10px)", y: 20 }}
-              animate={{ opacity: 1, scale: 1, filter: "blur(0px)", y: 0 }}
-              transition={{ duration: 1.4, delay: 0.2, ease: smoothEase }}
-              className="w-full max-w-sm md:max-w-md lg:w-2/5 aspect-[3/4] relative group mt-10 lg:mt-0 overflow-visible"
+              ref={wallArtContainerRef}
+              variants={fadeUp}
+              className="relative w-full aspect-video rounded-[2.5rem] overflow-hidden border border-border/80 shadow-[0_20px_60px_rgba(0,0,0,0.1)] bg-surface"
             >
-              <div className="w-full h-full relative overflow-hidden rounded-2xl bg-surface shadow-xl border border-border/40">
-                <Image
-                  src="/abhishek-photo.png"
-                  alt="Abishek Portrait"
-                  fill
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 400px"
-                  className="object-cover transition-all duration-[1200ms] ease-[cubic-bezier(0.22,1,0.36,1)] scale-100 group-hover:scale-[1.03]"
-                  priority
+              <AnimatePresence initial={false} custom={wallArtDirection} mode="popLayout">
+                <motion.video
+                  key={wallArtIndex}
+                  custom={wallArtDirection}
+                  variants={{
+                    enter: (dir: number) => ({ x: dir >= 0 ? "100%" : "-100%", opacity: 0 }),
+                    center: { x: 0, opacity: 1 },
+                    exit: (dir: number) => ({ x: dir >= 0 ? "-100%" : "100%", opacity: 0 }),
+                  }}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{ duration: 0.5, ease: smoothEase }}
+                  src={WALL_ART_VIDEOS[wallArtIndex].src}
+                  loop={WALL_ART_VIDEOS.length <= 1}
+                  onEnded={WALL_ART_VIDEOS.length > 1 ? nextWallArt : undefined}
+                  muted={wallArtMuted}
+                  playsInline
+                  preload="metadata"
+                  className="absolute inset-0 w-full h-full object-cover"
                 />
-                <div className="absolute bottom-6 left-6 backdrop-blur-md bg-white/40 border border-white/40 text-xs font-medium tracking-widest uppercase px-5 py-2.5 rounded-xl text-foreground shadow-sm">
-                  Visakhapatnam
-                </div>
+              </AnimatePresence>
+
+              <div className="absolute bottom-8 left-8 z-20 backdrop-blur-md bg-black/40 border border-white/10 text-xs font-medium tracking-widest uppercase px-6 py-3 rounded-xl text-white shadow-sm">
+                {WALL_ART_VIDEOS[wallArtIndex].label}
               </div>
 
-              {/* Logo Sticker Peel for Smart Morph */}
-              <div className="absolute -top-10 -right-6 z-30">
-                <StickerPeel
-                  layoutId="app-logo"
-                  imageSrc="/logo.png"
-                  width={120}
-                  rotate={-10}
-                  peelDirection={10}
-                  shadowIntensity={0.25}
-                  lightingIntensity={0.05}
-                />
-              </div>
+              <a
+                href={WALL_ART_VIDEOS[wallArtIndex].instagramUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="absolute top-8 left-8 z-20 flex items-center gap-2 backdrop-blur-md bg-black/40 border border-white/20 text-xs font-medium tracking-widest uppercase px-5 py-3 rounded-xl text-white shadow-sm hover:bg-black/60 transition-colors"
+              >
+                View Reel <ExternalLink size={14} />
+              </a>
+
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleWallArtMute(); }}
+                className="absolute top-8 right-8 z-20 w-11 h-11 rounded-full backdrop-blur-md bg-black/40 border border-white/20 flex items-center justify-center text-white hover:bg-black/60 hover:scale-110 transition-all duration-300 shadow-lg"
+              >
+                {wallArtMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+              </button>
+
+              {WALL_ART_VIDEOS.length > 1 && (
+                <>
+                  <button
+                    onClick={prevWallArt}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center text-white hover:bg-black/60 hover:scale-110 transition-all duration-300 shadow-lg"
+                  >
+                    <ChevronLeft size={22} />
+                  </button>
+                  <button
+                    onClick={nextWallArt}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center text-white hover:bg-black/60 hover:scale-110 transition-all duration-300 shadow-lg"
+                  >
+                    <ChevronRight size={22} />
+                  </button>
+                  <div className="absolute bottom-8 right-8 z-20 flex gap-2">
+                    {WALL_ART_VIDEOS.map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => goToWallArt(i)}
+                        className={`h-1.5 rounded-full transition-all duration-300 ${i === wallArtIndex ? "w-8 bg-white" : "w-1.5 bg-white/40 hover:bg-white/70"}`}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
             </motion.div>
-          </div>
+          </motion.div>
         </section>
 
         {/* --- ABOUT SECTION --- */}
@@ -260,16 +437,12 @@ export default function Profile() {
               <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-white/10 to-transparent opacity-80 pointer-events-none" />
 
               <div className="relative z-10 text-xl md:text-3xl lg:text-[2.15rem] leading-[1.6] md:leading-[1.7] font-medium text-foreground/90 tracking-tight">
-                Hi, I’m <span className="font-serif italic text-foreground">Abishek</span>. I'm a final-year B.Tech student who is completely obsessed with
+                {about.leadText}
 
                 <span className="inline-flex flex-wrap gap-2 md:gap-3 mx-2 md:mx-3 items-center translate-y-2">
-                  <SkillTag>3D Animation</SkillTag>
-                  <SkillTag>Storyboarding</SkillTag>
-                  <SkillTag>Concept Art</SkillTag>
-                  <SkillTag>Cinematography</SkillTag>
-                  <SkillTag>Illustration</SkillTag>
-                  <SkillTag>Graphic Design</SkillTag>
-                  <SkillTag>Visual Storytelling</SkillTag>
+                  {about.skills.map((skill) => (
+                    <SkillTag key={skill}>{skill}</SkillTag>
+                  ))}
                 </span>
 
                 <InlineBadge rotate={-8} bg="bg-amber-400" text="text-amber-950">
@@ -278,35 +451,27 @@ export default function Profile() {
                 <br /><br />
 
                 <span className="text-muted/90 font-light">
-                  My creative journey started offline with charcoal portraits, pencil sketches, and watercolors
-
-                  <InlineBadge rotate={10} bg="bg-orange-500" text="text-white">
-                    <Pencil fill="currentColor" size={20} className="md:w-6 md:h-6" />
-                  </InlineBadge>
-
-                  Today, I use that traditional foundation to map out dynamic storyboard sketches, craft detailed concept art, paint digital illustrations, and build immersive 3D cinematic worlds
+                  {about.paragraph2}
 
                   <InlineBadge rotate={-5} bg="bg-indigo-500" text="text-white">
                     <Tv fill="currentColor" size={22} className="md:w-6 md:h-6" />
-                  </InlineBadge>.
+                  </InlineBadge>
                 </span>
                 <br /><br />
 
                 <span className="text-muted/90 font-light">
-                  Whether I’m designing a bold startup brand identity, developing animated sequences, or editing high-energy content
+                  {about.paragraph3}
 
                   <InlineBadge rotate={12} bg="bg-rose-500" text="text-white">
                     <Flame fill="currentColor" size={22} className="md:w-6 md:h-6" />
                   </InlineBadge>
-
-                  I treat every project like a scene in a movie. I already work professionally as a graphic designer and editor, proving that you don't need to wait for graduation to start making a visual impact.
                 </span>
 
                 {/* The Toolkit Footnote */}
                 <div className="mt-12 pt-8 border-t border-border/60">
                   <p className="text-base md:text-lg font-mono text-muted leading-relaxed">
                     <strong className="text-foreground font-serif italic text-xl mr-3 font-medium">My Toolkit:</strong>
-                    Blender 3D, Unreal Engine, Maya, After Effects, Premiere Pro, Photoshop, Illustrator, and Adobe Animate
+                    {about.toolkit}
                   </p>
                 </div>
 

@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Folder } from "@/context/FolderContext";
-import { cn } from "@/lib/utils";
+import { cn, isVideoUrl, thumbUrl } from "@/lib/utils";
 import { motion } from "framer-motion";
 
 interface FolderCardProps {
@@ -95,18 +95,44 @@ export function FolderCard({ folder, className, onClick, layoutIdPrefix = "folde
             rotate = 10;
           }
 
-          return (
-            <motion.img
-              layoutId={`${layoutIdPrefix}-${folder.id}-image-${index}`}
+          const mediaClassName = "absolute w-[28%] h-[95%] object-cover rounded-[20px] border-2 border-white shadow-[0_8px_20px_rgba(0,0,0,0.12)] cursor-pointer hover:!z-20";
+          const mediaLayoutId = `${layoutIdPrefix}-${folder.id}-image-${index}`;
+          const mediaMotionProps = {
+            style: { ...styles, transformOrigin: "center" as const },
+            initial: { rotate: 0 },
+            animate: { rotate },
+            whileHover: { y: -10, scale: 1.05 },
+            transition: { type: "spring" as const, stiffness: 400, damping: 25 },
+          };
+
+          return isVideoUrl(src) ? (
+            <motion.video
+              layoutId={mediaLayoutId}
               key={index}
               src={src}
+              className={mediaClassName}
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              onMouseEnter={(e) => (e.currentTarget as HTMLVideoElement).play()}
+              onMouseLeave={(e) => {
+                const v = e.currentTarget as HTMLVideoElement;
+                v.pause();
+                v.currentTime = 0;
+              }}
+              {...mediaMotionProps}
+            />
+          ) : (
+            <motion.img
+              layoutId={mediaLayoutId}
+              key={index}
+              src={thumbUrl(src, 192)}
               alt={`Memory ${index + 1}`}
-              className="absolute w-[28%] h-[95%] object-cover rounded-[20px] border-2 border-white shadow-[0_8px_20px_rgba(0,0,0,0.12)] cursor-pointer hover:!z-20"
-              style={{ ...styles, transformOrigin: "center" }}
-              initial={{ rotate: 0 }}
-              animate={{ rotate }}
-              whileHover={{ y: -10, scale: 1.05 }}
-              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+              className={mediaClassName}
+              loading="lazy"
+              decoding="async"
+              {...mediaMotionProps}
             />
           );
         })}

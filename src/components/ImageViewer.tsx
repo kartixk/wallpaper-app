@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
+import { isVideoUrl } from "@/lib/utils";
 
 interface ImageViewerProps {
   src: string | null;
@@ -16,7 +17,8 @@ export function ImageViewer({ src, onClose }: ImageViewerProps) {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = "wallpaper-" + Date.now() + ".jpg";
+      const ext = isVideoUrl(src) ? "mp4" : "jpg";
+      link.download = "wallpaper-" + Date.now() + "." + ext;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -49,16 +51,31 @@ export function ImageViewer({ src, onClose }: ImageViewerProps) {
             </button>
           </div>
 
-          {/* Image */}
-          <motion.img
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            src={src}
-            alt="Fullscreen wallpaper"
-            className="w-full h-full object-contain p-4 md:p-12"
-          />
+          {/* Media */}
+          {src && isVideoUrl(src) ? (
+            <motion.video
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              src={src}
+              className="w-full h-full object-contain p-4 md:p-12"
+              controls
+              autoPlay
+              loop
+              playsInline
+            />
+          ) : (
+            <motion.img
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              src={src ?? undefined}
+              alt="Fullscreen wallpaper"
+              className="w-full h-full object-contain p-4 md:p-12"
+            />
+          )}
 
           {/* Bottom Bar */}
           <div className="absolute bottom-0 w-full p-8 flex justify-center z-10 pointer-events-none pb-12">

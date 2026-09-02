@@ -5,6 +5,7 @@ import { useFolders } from "@/context/FolderContext";
 import { useImage } from "@/context/ImageContext";
 import { useSearch } from "@/context/SearchContext";
 import { cn } from "@/lib/utils";
+import { MediaThumb } from "@/components/MediaThumb";
 
 export default function Home() {
   const { folders } = useFolders();
@@ -96,9 +97,10 @@ export default function Home() {
           {displayedImages.map((src, index) => (
             <div key={index} className="break-inside-avoid relative overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-shadow mb-6 cursor-pointer group" onClick={() => viewImage(src)}>
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors z-10"></div>
-              <img
+              <MediaThumb
                 src={src}
                 alt={`Uploaded image ${index + 1}`}
+                width={640}
                 className="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-105"
               />
             </div>

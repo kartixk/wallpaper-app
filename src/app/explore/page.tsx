@@ -6,13 +6,14 @@ import { useImage } from "@/context/ImageContext";
 import { useSearch } from "@/context/SearchContext";
 import { FolderCard } from "@/components/FolderCard";
 import { motion, AnimatePresence } from "framer-motion";
+import { MediaThumb } from "@/components/MediaThumb";
 
 export default function Explore() {
   const { folders } = useFolders();
   const { viewImage } = useImage();
   const { searchQuery } = useSearch();
   const exploreFolders = folders.filter(f =>
-    f.name !== "Posts" && f.name.toLowerCase().includes(searchQuery.toLowerCase())
+    f.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
   const [selectedFolder, setSelectedFolder] = useState<Folder | null>(null);
 
@@ -95,7 +96,7 @@ export default function Explore() {
                   onClick={() => viewImage(src)}
                 >
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors z-10"></div>
-                  <img src={src} alt="wallpaper" className="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-105" />
+                  <MediaThumb src={src} alt="wallpaper" width={640} className="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-105" />
                 </motion.div>
               ))}
             </div>

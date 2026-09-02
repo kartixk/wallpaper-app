@@ -3,6 +3,7 @@ import "./globals.css";
 import { FolderProvider } from "@/context/FolderContext";
 import { ImageProvider } from "@/context/ImageContext";
 import { SearchProvider } from "@/context/SearchContext";
+import { AboutProvider } from "@/context/AboutContext";
 import { NavigationLayout } from "@/components/NavigationLayout";
 
 export const metadata: Metadata = {
@@ -30,9 +31,11 @@ export default function RootLayout({
         <FolderProvider>
           <ImageProvider>
             <SearchProvider>
-              <NavigationLayout>
-                {children}
-              </NavigationLayout>
+              <AboutProvider>
+                <NavigationLayout>
+                  {children}
+                </NavigationLayout>
+              </AboutProvider>
             </SearchProvider>
           </ImageProvider>
         </FolderProvider>
