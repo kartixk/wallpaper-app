@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     description: SITE_DESCRIPTION,
     images: [
       {
-        url: "/hero-image.jpeg",
+        url: "/hero-image.png",
         width: 1200,
         height: 900,
         alt: "Abishek in front of a large-scale mural artwork",
@@ -55,7 +55,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
-    images: ["/hero-image.jpeg"],
+    images: ["/hero-image.png"],
   },
   robots: {
     index: true,

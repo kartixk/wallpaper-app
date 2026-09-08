@@ -257,12 +257,20 @@ export default function Profile() {
           {/* Full-screen backdrop */}
           <div className="absolute inset-0 -z-20">
             <Image
-              src="/hero-image.jpeg"
+              src="/pencil-abhishek-photo.webp"
               alt=""
               fill
               priority
               sizes="100vw"
-              className="object-cover"
+              className="object-cover md:hidden"
+            />
+            <Image
+              src="/hero-image.png"
+              alt=""
+              fill
+              priority
+              sizes="100vw"
+              className="object-cover hidden md:block"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/20 to-black/10" />
             <div className="absolute inset-0 bg-gradient-to-r from-black/35 via-black/5 to-transparent" />
