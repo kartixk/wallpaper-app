@@ -33,7 +33,7 @@ export function NavigationLayout({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      {!isPencilPage && (
+      {!isPencilPage && !isRootPage && (
         <>
           <div className="w-full flex items-center justify-center gap-3 pb-32 pt-4 opacity-80">
             <span className="text-2xl font-bold dark:text-white">With</span>
