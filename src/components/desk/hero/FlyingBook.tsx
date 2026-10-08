@@ -8,8 +8,11 @@ import { Environment, useTexture } from "@react-three/drei";
 import { useAbout, type AboutContent } from "@/context/AboutContext";
 import { ON_MAT, PROPS } from "./layout";
 import { flight } from "./flight";
+import { TOOLS } from "../tools";
+import { ToolModel } from "../ToolCup";
+import { planFall, poseTool } from "./toolFall";
 import { BOOK_W, Sketchbook } from "./props/Sketchbook";
-import { PAGE_PX, drawLeftPage, drawRightPage } from "./props/BookPages";
+import { PAGE_PX, drawIndexPage, drawLeftPage, drawRightPage, drawToolsPage } from "./props/BookPages";
 import { cachedTexture, fontsReady } from "./props/canvas";
 
 type Props = {
@@ -69,7 +72,14 @@ export default function FlyingBook({ slot }: Props) {
   );
 }
 
-const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+/** Once the page has landed on the index, the tools drop on their own clock (not the scroll's): this long each, staggered. */
+const DROP_SECONDS = 0.9;
+const DROP_STAGGER = 3; // × each tool's delay fraction, in seconds
+/** How far the page must have turned to trigger the drop, and to re-arm it again. */
+const LANDED = 0.9;
+const REARM = 0.5;
+
+const easeInOut =(t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 const clamp01 = (t: number) => THREE.MathUtils.clamp(t, 0, 1);
 const smooth = THREE.MathUtils.smoothstep;
 
@@ -79,6 +89,10 @@ function Flight({ slot, about }: Props & { about: AboutContent }) {
   use(fontsReady());
   const book = useRef<THREE.Group>(null);
   const open = useRef(0);
+  const turn = useRef(0);
+  const tools = useRef<THREE.Group>(null);
+  const plans = useMemo(() => planFall(), []);
+  const drop = useRef({ start: -1 });
   const shadows = useRef({ slot: -1, spread: -1 });
 
   // the two inside pages: the pasted-in illustration, and the Meet Pencil copy
@@ -91,6 +105,9 @@ function Flight({ slot, about }: Props & { about: AboutContent }) {
     () => cachedTexture(`page-right:${JSON.stringify(about)}`, ...PAGE_PX, (ctx, w, h) => drawRightPage(ctx, w, h, about)),
     [about],
   );
+  // the page that turns in after it: the index, facing the page the tools drop onto
+  const indexPage = useMemo(() => cachedTexture("page-index", ...PAGE_PX, drawIndexPage), []);
+  const toolsPage = useMemo(() => cachedTexture("page-tools", ...PAGE_PX, drawToolsPage), []);
 
   // compile the book's shaders now, while it's hidden, not on the first frame it flies
   const get = useThree((s) => s.get);
@@ -137,7 +154,7 @@ function Flight({ slot, about }: Props & { about: AboutContent }) {
     [],
   );
 
-  useFrame(({ camera, size }) => {
+  useFrame(({ camera, size, clock }) => {
     const g = book.current;
     const src = flight.camera;
     const el = slot.current;
@@ -156,8 +173,26 @@ function Flight({ slot, about }: Props & { about: AboutContent }) {
     const endA = Math.max(1, a.top + sy + a.height / 2 - size.height / 2);
     const pA = clamp01(sy / endA);
     const b = flight.spread?.getBoundingClientRect();
-    const endB = b ? b.top + sy + b.height / 2 - size.height / 2 : Infinity;
+    // the spread is pinned, so its own rect drifts while pinned: the book is centred when the pin's top reaches the page top
+    const pin = flight.pin?.getBoundingClientRect();
+    const endB = pin ? pin.top + sy : b ? b.top + sy + b.height / 2 - size.height / 2 : Infinity;
     const pB = b ? clamp01((sy - endA) / Math.max(1, endB - endA)) : 0;
+    // leg 3: pinned and lying open; the leaf turns over to the index mid-way, then it rests there
+    const pinned = pin ? Math.max(1, pin.height - size.height) : 1;
+    const pC = pin ? clamp01((sy - endB) / pinned) : 0;
+    turn.current = easeInOut(smooth(pC, 0.1, 0.55));
+
+    // the moment the page has landed on the index spread, the tools drop, once, in real time;
+    // turning back past the re-arm point puts them away so they drop again next time
+    const d = drop.current;
+    if (d.start < 0 && turn.current >= LANDED) d.start = clock.elapsedTime;
+    else if (d.start >= 0 && turn.current < REARM) d.start = -1;
+    const since = d.start < 0 ? -1 : clock.elapsedTime - d.start;
+    if (tools.current) {
+      tools.current.children.forEach((obj, i) => {
+        poseTool(obj, plans[i], clamp01((since - plans[i].delay * DROP_STAGGER) / DROP_SECONDS));
+      });
+    }
     flight.progress = pA;
 
     // 2. the camera: the hero's, shifted with the page; on the second leg it turns to face the viewport
@@ -232,7 +267,17 @@ function Flight({ slot, about }: Props & { about: AboutContent }) {
 
   return (
     <group ref={book} visible={false}>
-      <Sketchbook open={open} leftPage={leftPage} rightPage={rightPage} />
+      <Sketchbook open={open} leftPage={leftPage} rightPage={rightPage} turn={turn} turnedPage={indexPage} nextPage={toolsPage}>
+        {/* the tool cup, standing up off the right-hand page */}
+        {/* the tools: loose, posed in book space; hidden until they are dropped */}
+        <group ref={tools}>
+          {TOOLS.map((tool) => (
+            <group key={tool.id}>
+              <ToolModel id={tool.id} />
+            </group>
+          ))}
+        </group>
+      </Sketchbook>
     </group>
   );
 }

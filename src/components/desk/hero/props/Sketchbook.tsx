@@ -29,9 +29,21 @@ type Props = {
   open?: React.RefObject<number>;
   leftPage?: THREE.Texture;
   rightPage?: THREE.Texture;
+  /**
+   * Turns the right-hand page over to the left, 0–1. The leaf's front is `rightPage`, its back
+   * `turnedPage`; `nextPage` is what's underneath, on the right, once it has gone.
+   */
+  turn?: React.RefObject<number>;
+  turnedPage?: THREE.Texture;
+  nextPage?: THREE.Texture;
+  /** Things standing on the book's right-hand page (in the book's own units). */
+  children?: React.ReactNode;
 };
 
-export function Sketchbook({ open, leftPage, rightPage }: Props = {}) {
+/** The turning leaf rides this far above the page it lies on, clear of z-fighting. */
+const LEAF_LIFT = 0.0025;
+
+export function Sketchbook({ open, leftPage, rightPage, turn, turnedPage, nextPage, children }: Props = {}) {
   use(fontsReady());
   const [logo, character] = useTexture(["/desk/logo-abishek.webp", "/desk/pencil-hoodie.webp"]);
 
@@ -129,13 +141,30 @@ export function Sketchbook({ open, leftPage, rightPage }: Props = {}) {
   const elastic = useRef<THREE.Group>(null);
   const leftMesh = useRef<THREE.Mesh>(null);
   const rightMesh = useRef<THREE.Mesh>(null);
+  const leaf = useRef<THREE.Group>(null);
+  const leafFront = useRef<THREE.Mesh>(null);
+  const leafBack = useRef<THREE.Mesh>(null);
   // R3F hands the geometry over after construction, so size the morph influences by hand
   useLayoutEffect(() => {
     leftMesh.current?.updateMorphTargets();
     rightMesh.current?.updateMorphTargets();
+    leafFront.current?.updateMorphTargets();
+    leafBack.current?.updateMorphTargets();
   }, [leftGeo, rightGeo]);
   useFrame(() => {
     const o = open?.current ?? 0;
+    const bowOpen = THREE.MathUtils.smoothstep(o, 0.6, 1);
+    // the leaf: hinged on the spine like the cover, flat on the right until it is turned
+    const l = leaf.current;
+    if (l) {
+      const t = turn?.current ?? 0;
+      l.rotation.z = Math.PI * t;
+      l.visible = o > 0; // while the book is shut it is part of the block
+      // its pages bow with the book, the bow flipping over as the leaf does
+      const flip = Math.cos(Math.PI * t) * bowOpen;
+      if (leafFront.current?.morphTargetInfluences) leafFront.current.morphTargetInfluences[0] = flip;
+      if (leafBack.current?.morphTargetInfluences) leafBack.current.morphTargetInfluences[0] = -flip;
+    }
     if (front.current) front.current.rotation.z = Math.PI * o;
     // the elastic is slipped off over the edge first, then tucked out of sight under the back cover
     const slip = THREE.MathUtils.smoothstep(o, 0, 0.25);
@@ -146,7 +175,7 @@ export function Sketchbook({ open, leftPage, rightPage }: Props = {}) {
       e.visible = slip < 1; // fully tucked away: nothing left to see
     }
     // the pages bow up out of the gutter as the book lies open
-    const bow = THREE.MathUtils.smoothstep(o, 0.6, 1);
+    const bow = bowOpen;
     for (const m of [leftMesh.current, rightMesh.current]) if (m?.morphTargetInfluences) m.morphTargetInfluences[0] = bow;
   });
 
@@ -168,11 +197,23 @@ export function Sketchbook({ open, leftPage, rightPage }: Props = {}) {
         {block}
       </mesh>
       <mesh ref={rightMesh} geometry={rightGeo} position={[-W / 2 + PAGE_W / 2, MID, 0]} rotation-x={-Math.PI / 2}>
-        {paperMat(rightPage ?? blank)}
+        {paperMat((turnedPage ? nextPage : undefined) ?? rightPage ?? blank)}
       </mesh>
+      {/* the page that turns: front is the old right-hand page, back the new left-hand one */}
+      {turnedPage && (
+        <group ref={leaf} position={[-W / 2, MID + LEAF_LIFT, 0]} visible={false}>
+          <mesh ref={leafFront} geometry={rightGeo} position-x={PAGE_W / 2} rotation-x={-Math.PI / 2}>
+            {paperMat(rightPage ?? blank)}
+          </mesh>
+          <mesh ref={leafBack} geometry={leftGeo} position-x={PAGE_W / 2} rotation={[-Math.PI / 2, Math.PI, 0]}>
+            {paperMat(turnedPage)}
+          </mesh>
+        </group>
+      )}
       <RoundedBox args={[0.13, MID - 0.006, D + 0.004]} radius={0.04} smoothness={4} position={[-W / 2 + 0.05, (MID - 0.006) / 2, 0]}>
         {cloth}
       </RoundedBox>
+      {children}
       {/* ribbon bookmark trailing out of the bottom */}
       <mesh position={[0.35, 0.004, D / 2 + 0.2]} rotation={[-Math.PI / 2, 0, -0.12]}>
         <planeGeometry args={[0.06, 0.48]} />
@@ -220,6 +261,12 @@ export function Sketchbook({ open, leftPage, rightPage }: Props = {}) {
       </group>
     </group>
   );
+}
+
+/** Height of the open book's page surface at book-x, bowed up out of the gutter (matches `pageGeometry`). */
+export function pageHeightAt(x: number) {
+  const u = THREE.MathUtils.clamp(Math.abs(x + W / 2) / PAGE_W, 0, 1);
+  return MID + 0.07 * Math.pow(Math.max(0, Math.sin(Math.PI * Math.min(1, u * 1.15))), 0.7) * (1 - 0.55 * u);
 }
 
 /**
