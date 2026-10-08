@@ -26,9 +26,25 @@ export function WhatIDo() {
   }, []);
 
   return (
-    <section id="skills" className="surface-stone grain relative overflow-hidden px-6 py-28 md:px-12">
-      <div className="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-12">
-        <div className="lg:col-span-5">
+    <section id="skills" className="surface-stone grain relative overflow-hidden px-6 py-28 md:px-12 md:py-14">
+      <div className="mx-auto grid max-w-4xl items-center gap-10">
+        {/* On larger screens the sketchbook (just above) carries the heading, the index and the
+            cup, so here only a row of shortcuts stays. Phones, where the page is too small to
+            read, keep the full section below it; screen readers get the heading either way. */}
+        <div className="hidden flex-wrap items-center justify-center gap-3 md:flex">
+          <span className="font-marker mr-2 text-smoke/80">jump to the work →</span>
+          {TOOLS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => openTool(t)}
+              className="btn-line rounded-full bg-paper/70 px-4 py-2 text-sm font-medium backdrop-blur transition-transform hover:-translate-y-0.5"
+            >
+              {t.discipline}
+            </button>
+          ))}
+        </div>
+
+        <div className="md:hidden">
           <SectionTag n="02">What I do</SectionTag>
           <h2 className="display mt-6 text-5xl md:text-7xl">
             Every tool has <Scribble><em>a job.</em></Scribble>
@@ -64,12 +80,14 @@ export function WhatIDo() {
           </ul>
         </div>
 
-        <div ref={stageRef} className="relative h-[440px] sm:h-[520px] lg:col-span-7 lg:h-[620px]">
+        <h2 className="sr-only hidden md:block">Every tool has a job.</h2>
+
+        <div ref={stageRef} className="relative h-[440px] sm:h-[520px] md:hidden">
           {/* soft pool of lamp light under the cup */}
           <div aria-hidden className="absolute inset-x-[10%] bottom-[6%] top-[20%] rounded-full bg-[radial-gradient(closest-side,rgba(255,250,240,0.9),rgba(255,250,240,0))]" />
           {inView && <ToolCup active={active} onActive={setActive} onSelect={openTool} running={inView} />}
-          <p className="font-marker pointer-events-none absolute bottom-2 right-4 rotate-[-4deg] text-smoke/80">
-            go on, pull one out ↑
+          <p className="font-marker pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 text-center text-lg text-smoke/80">
+            {TOOLS.find((t) => t.id === active)?.discipline ?? "go on, pull one out ↑"}
           </p>
         </div>
       </div>

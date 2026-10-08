@@ -91,6 +91,15 @@ function Scene({ active, onActive, onSelect }: Omit<Props, "running">) {
   );
 }
 
+/** Where tool `i` of `TOOLS` stands in the cup, as a matrix in the cup's own frame (y = 0 is its base). */
+export function slotMatrix(i: number) {
+  const angle = (i / TOOLS.length) * Math.PI * 2 + 0.3;
+  const lean = 0.13 + (i % 3) * 0.05;
+  const m = new THREE.Matrix4().makeRotationY(-angle);
+  m.multiply(new THREE.Matrix4().makeTranslation(0.5, FLOOR, 0));
+  return m.multiply(new THREE.Matrix4().makeRotationZ(-lean));
+}
+
 function ToolSlot({
   tool,
   lean,
@@ -155,7 +164,7 @@ function ToolSlot({
   );
 }
 
-const TOOL_HEIGHT: Record<Tool["id"], number> = {
+export const TOOL_HEIGHT: Record<Tool["id"], number> = {
   pencil: 2.95,
   stylus: 3.05,
   wallbrush: 3.3,
@@ -166,7 +175,8 @@ const TOOL_HEIGHT: Record<Tool["id"], number> = {
 
 /* ----------------------------- the cup ----------------------------- */
 
-function Cup() {
+/** The empty glass: frosted body, rim and thick base. */
+export function Cup() {
   const geometry = useMemo(() => {
     const p = [
       [0, 0], [0.8, 0], [0.84, 0.04], [0.96, 2.0], [0.955, 2.03], [0.925, 2.04], [0.9, 2.0],
@@ -209,7 +219,7 @@ function Cup() {
 /* ----------------------------- the tools ----------------------------- */
 // Each model stands on y = 0 and points up.
 
-function ToolModel({ id }: { id: Tool["id"] }) {
+export function ToolModel({ id }: { id: Tool["id"] }) {
   switch (id) {
     case "pencil":
       return <GraphitePencil />;

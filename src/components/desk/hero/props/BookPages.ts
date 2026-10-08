@@ -1,5 +1,6 @@
 import type { AboutContent } from "@/context/AboutContext";
 import { cssFont, grain, rng } from "./canvas";
+import { TOOLS } from "../../tools";
 
 /**
  * The open sketchbook's two pages, drawn onto canvases: warm sketchbook paper with the
@@ -335,6 +336,150 @@ export function drawRightPage(ctx: CanvasRenderingContext2D, w: number, h: numbe
   while (s > 0.6 && layout(s, false) > bottom) s -= 0.04;
   layout(s, true);
   pageNumber(ctx, w, h, "07", "right");
+}
+
+/* ------------------------------ the index spread ------------------------------ */
+
+/** Left page after the turn: "Every tool has a job", laid out as the sketchbook's index. */
+export function drawIndexPage(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  paper(ctx, w, h, "right", 71);
+  const f = fonts();
+  const left = w * 0.12;
+  const right = w * 0.86;
+  let y = h * 0.1;
+
+  // eyebrow: 02 —— WHAT I DO
+  ctx.font = `700 30px ${f.mono}`;
+  ctx.fillStyle = "rgba(31,30,28,0.6)";
+  setSpacing(ctx, 9);
+  ctx.fillText("02", left, y);
+  const n = ctx.measureText("02 ").width;
+  ctx.fillRect(left + n + 6, y - 10, 70, 3);
+  ctx.font = `500 30px ${f.mono}`;
+  ctx.fillText("WHAT I DO", left + n + 96, y);
+  setSpacing(ctx, 0);
+
+  // Every tool has / a job.
+  y += 160;
+  ctx.fillStyle = INK;
+  ctx.font = `600 112px ${f.sans}`;
+  setSpacing(ctx, -4);
+  ctx.fillText("Every tool has", left, y);
+  y += 140;
+  setSpacing(ctx, -2);
+  ctx.font = `italic 400 128px ${f.serif}`;
+  ctx.fillText("a job.", left, y);
+  const jw = ctx.measureText("a job.").width;
+  setSpacing(ctx, 0);
+  ctx.strokeStyle = OCHRE;
+  ctx.lineWidth = 11;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(left + 4, y + 26);
+  ctx.bezierCurveTo(left + jw * 0.2, y + 14, left + jw * 0.45, y + 12, left + jw * 0.62, y + 20);
+  ctx.bezierCurveTo(left + jw * 0.8, y + 28, left + jw * 0.95, y + 30, left + jw, y + 16);
+  ctx.stroke();
+
+  // INDEX
+  y += 150;
+  ctx.font = `500 26px ${f.mono}`;
+  ctx.fillStyle = "rgba(31,30,28,0.55)";
+  setSpacing(ctx, 8);
+  ctx.fillText("INDEX", left, y);
+  setSpacing(ctx, 0);
+  ctx.strokeStyle = "rgba(31,30,28,0.28)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(left, y + 22);
+  ctx.lineTo(right, y + 22);
+  ctx.stroke();
+
+  // one row per tool: discipline, the tool that makes it, a dotted leader, its number
+  const rowH = Math.min(150, (h * 0.92 - y - 40) / TOOLS.length);
+  y += 22;
+  TOOLS.forEach((t, i) => {
+    const base = y + rowH * 0.5;
+    ctx.fillStyle = INK;
+    ctx.font = `500 56px ${f.sans}`;
+    ctx.fillText(t.discipline, left, base);
+    const tw = ctx.measureText(t.discipline).width;
+
+    ctx.font = `500 24px ${f.mono}`;
+    ctx.fillStyle = "rgba(31,30,28,0.5)";
+    setSpacing(ctx, 5);
+    ctx.fillText(t.name.toUpperCase(), left, base + 36);
+    setSpacing(ctx, 0);
+
+    const num = String(i + 1).padStart(2, "0");
+    ctx.font = `600 44px ${f.mono}`;
+    ctx.fillStyle = CLAY;
+    ctx.textAlign = "right";
+    ctx.fillText(num, right, base);
+    ctx.textAlign = "left";
+    const nw = ctx.measureText(num).width;
+
+    ctx.strokeStyle = "rgba(31,30,28,0.35)";
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    ctx.setLineDash([0.1, 14]);
+    ctx.beginPath();
+    ctx.moveTo(left + tw + 24, base - 6);
+    ctx.lineTo(right - nw - 24, base - 6);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    y += rowH;
+  });
+
+  pageNumber(ctx, w, h, "08", "left");
+}
+
+/** Right page after the turn: the invitation to the tool cup that follows. */
+export function drawToolsPage(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  paper(ctx, w, h, "left", 83);
+  const f = fonts();
+  const left = w * 0.14;
+  const maxW = w * 0.76;
+
+  flow(
+    ctx,
+    [
+      {
+        text: "Here is the whole kit, spilled across the page. Each one makes something different — from graphite portraits to murals the size of a building.",
+        font: `400 52px ${f.sans}`,
+        color: INK,
+      },
+    ],
+    left,
+    h * 0.16,
+    maxW,
+    78,
+    true,
+  );
+
+  // handwritten nudge with an arrow curling down the page
+  ctx.save();
+  ctx.translate(left, h * 0.36);
+  ctx.rotate(-0.06);
+  ctx.fillStyle = CLAY;
+  ctx.font = `${w * 0.052}px ${f.marker}`;
+  ctx.fillText("let's get to work!", 0, 0);
+  ctx.restore();
+  ctx.strokeStyle = CLAY;
+  ctx.lineWidth = 6;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(w * 0.22, h * 0.4);
+  ctx.bezierCurveTo(w * 0.16, h * 0.46, w * 0.16, h * 0.54, w * 0.24, h * 0.6);
+  ctx.moveTo(w * 0.24, h * 0.6);
+  ctx.lineTo(w * 0.2, h * 0.585);
+  ctx.moveTo(w * 0.24, h * 0.6);
+  ctx.lineTo(w * 0.245, h * 0.555);
+  ctx.stroke();
+
+  // (the tools are 3D, dropped onto this page by hero/FlyingBook)
+
+  pageNumber(ctx, w, h, "09", "right");
 }
 
 function setSpacing(ctx: CanvasRenderingContext2D, px: number) {

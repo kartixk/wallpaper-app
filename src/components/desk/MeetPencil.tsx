@@ -15,24 +15,39 @@ export function MeetPencil() {
     .filter(Boolean);
 
   return (
-    <section id="about" className="surface-paper grain relative overflow-hidden px-6 pb-28 pt-32 md:px-12">
+    // overflow-clip, not hidden: hidden would make this the scroll container and un-stick the book below
+    <section id="about" className="surface-paper grain relative overflow-clip px-6 pb-28 pt-32 md:px-12">
       <div className="mx-auto max-w-6xl">
         {/* the sketchbook flies down from the manifesto and falls open here (see hero/FlyingBook);
-            its shadow fades in as it lands (--book: 0 → 1) */}
+            its shadow fades in as it lands (--book: 0 → 1). It then stays pinned while the
+            scroll through this tall wrapper turns its page to the index of the next section. */}
         <div
           ref={(el) => {
-            flight.spread = el;
+            flight.pin = el;
             return () => {
-              flight.spread = null;
+              flight.pin = null;
             };
           }}
-          className="relative mx-auto aspect-[44/30] w-full max-w-5xl"
+          className="relative"
+          style={{ height: "200svh" }}
         >
-          <div
-            aria-hidden
-            style={{ opacity: "var(--book, 0)" }}
-            className="absolute -bottom-10 left-1/2 h-16 w-[88%] -translate-x-1/2 rounded-[50%] bg-[#3a2a1a]/30 blur-3xl"
-          />
+          <div className="sticky top-0 grid h-[100svh] place-items-center">
+            <div
+              ref={(el) => {
+                flight.spread = el;
+                return () => {
+                  flight.spread = null;
+                };
+              }}
+              className="relative aspect-[44/30] w-full max-w-5xl"
+            >
+              <div
+                aria-hidden
+                style={{ opacity: "var(--book, 0)" }}
+                className="absolute -bottom-10 left-1/2 h-16 w-[88%] -translate-x-1/2 rounded-[50%] bg-[#3a2a1a]/30 blur-3xl"
+              />
+            </div>
+          </div>
         </div>
 
         {/* The words printed on the book's right-hand page. On phones the page is too small to

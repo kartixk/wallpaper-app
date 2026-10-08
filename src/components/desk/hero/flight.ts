@@ -12,6 +12,11 @@ export const flight = {
   progress: 0,
   /** Where the book finally lies open (the Meet Pencil spread); registered by that section. */
   spread: null as HTMLElement | null,
+  /**
+   * The tall wrapper the spread is pinned inside (position: sticky). Its top is where the book
+   * is centred; the scroll left in it, once the book has landed, turns the page to the index.
+   */
+  pin: null as HTMLElement | null,
   /** Set once the hero scene has compiled and faded in; READY_EVENT fires at the same time. */
   ready: false,
 };
