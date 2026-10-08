@@ -1,10 +1,41 @@
 import type { Metadata } from "next";
+import { Permanent_Marker, JetBrains_Mono, Instrument_Serif } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { FolderProvider } from "@/context/FolderContext";
 import { ImageProvider } from "@/context/ImageContext";
 import { SearchProvider } from "@/context/SearchContext";
 import { AboutProvider } from "@/context/AboutContext";
 import { NavigationLayout } from "@/components/NavigationLayout";
+
+const permanentMarker = Permanent_Marker({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-permanent-marker",
+});
+
+const generalSans = localFont({
+  src: [
+    { path: "./fonts/GeneralSans-400.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/GeneralSans-500.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/GeneralSans-600.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/GeneralSans-700.woff2", weight: "700", style: "normal" },
+  ],
+  variable: "--font-general-sans",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
+});
+
+const instrumentSerif = Instrument_Serif({
+  weight: "400",
+  style: ["normal", "italic"],
+  subsets: ["latin"],
+  variable: "--font-instrument-serif",
+});
 
 const SITE_URL = "https://abishek-pencil.vercel.app";
 const SITE_TITLE = "Abishek — Visual Artist & Digital Illustrator";
@@ -72,7 +103,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className="h-full antialiased font-sans"
+      className={`h-full antialiased font-sans ${permanentMarker.variable} ${generalSans.variable} ${jetbrainsMono.variable} ${instrumentSerif.variable}`}
     >
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />

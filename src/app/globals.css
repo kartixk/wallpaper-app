@@ -150,3 +150,190 @@
   --surface: #f0eee9;
   --border: #e3dfd8;
 }
+/* ------------------------------------------------------------------ */
+/* Pencil's Desk — homepage design system                              */
+/* A quiet studio palette: paper, stone and graphite neutrals, with    */
+/* muted accents taken from his tools (pencil ochre, eraser clay,      */
+/* sage and dusk). Depth comes from soft gradients, never flat fills.  */
+/* ------------------------------------------------------------------ */
+
+@theme {
+  --color-paper: #f4f0e8;
+  --color-stone: #e7e1d6;
+  --color-sand: #d8cfbf;
+  --color-ink: #1f1e1c;
+  --color-graphite: #2a2926;
+  --color-smoke: #6b675f;
+  --color-ochre: #d4a24c;
+  --color-ochre-soft: #ecd3a0;
+  --color-clay: #b5664b;
+  --color-sage: #8a9682;
+  --color-dusk: #6f7f95;
+  --font-sans-desk: var(--font-general-sans), system-ui, sans-serif;
+  --font-marker: var(--font-permanent-marker), "Comic Sans MS", cursive;
+  --font-accent: var(--font-instrument-serif), Georgia, serif;
+  --font-ruler: var(--font-jetbrains-mono), ui-monospace, monospace;
+  --animate-spin-record: spin 2.4s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+  50% {
+    transform: translateY(-12px) rotate(0.8deg);
+  }
+}
+
+.desk {
+  font-family: var(--font-sans-desk);
+  color: var(--color-ink);
+  background: var(--color-paper);
+}
+
+.desk ::selection {
+  background: var(--color-ochre-soft);
+  color: var(--color-ink);
+}
+
+/* Big headings in General Sans; wrap one word in <em> for the serif accent */
+.display {
+  font-family: var(--font-sans-desk);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 0.98;
+}
+
+.display em {
+  font-family: var(--font-accent);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+}
+
+/* Section surfaces — all soft gradients within the same family */
+.surface-paper {
+  background: radial-gradient(110% 80% at 15% 0%, #fbf8f2 0%, #f4f0e8 45%, #ebe5da 100%);
+}
+
+.surface-stone {
+  background: radial-gradient(110% 90% at 85% 0%, #f1ece3 0%, #e7e1d6 50%, #dbd3c5 100%);
+}
+
+.surface-graphite {
+  color: var(--color-paper);
+  background:
+    radial-gradient(70% 60% at 80% 0%, rgb(212 162 76 / 0.14), transparent 70%),
+    radial-gradient(60% 60% at 0% 100%, rgb(111 127 149 / 0.14), transparent 70%),
+    linear-gradient(180deg, #2a2926 0%, #1c1b19 100%);
+}
+
+/* Film grain, layered over any section */
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Strip of masking tape */
+.tape {
+  background: linear-gradient(180deg, rgb(246 238 216 / 0.85), rgb(228 216 188 / 0.85));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.1);
+  clip-path: polygon(3% 0, 97% 4%, 100% 50%, 97% 96%, 2% 100%, 0 52%);
+}
+
+/* Soft, lamp-cast shadow for raised surfaces */
+.soft-card {
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.6) inset,
+    0 1px 2px rgb(40 30 15 / 0.06),
+    0 10px 24px -8px rgb(40 30 15 / 0.14),
+    0 30px 60px -24px rgb(40 30 15 / 0.22);
+}
+
+/* Primary button: graphite, the colour of his pencil lead */
+.btn-ink {
+  color: var(--color-paper);
+  background: linear-gradient(180deg, #3a3834 0%, #1f1e1c 100%);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.14) inset,
+    0 10px 24px -10px rgb(31 30 28 / 0.7);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.btn-ink:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.14) inset,
+    0 16px 30px -12px rgb(31 30 28 / 0.8);
+}
+
+/* Accent button: muted pencil ochre */
+.btn-ochre {
+  color: var(--color-ink);
+  background: linear-gradient(180deg, #f0d49a 0%, #d4a24c 100%);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.55) inset,
+    0 10px 24px -10px rgb(160 110 30 / 0.7);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.btn-ochre:hover {
+  transform: translateY(-2px);
+}
+
+/* Quiet outline button on light surfaces */
+.btn-line {
+  color: var(--color-ink);
+  border: 1px solid rgb(31 30 28 / 0.18);
+  background: rgb(255 255 255 / 0.35);
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+.btn-line:hover {
+  background: rgb(255 255 255 / 0.7);
+  border-color: rgb(31 30 28 / 0.3);
+}
+
+/* Frosted glass for dark surfaces and controls over media */
+.btn-glass {
+  color: #fff;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.14), rgb(255 255 255 / 0.05));
+  border: 1px solid rgb(255 255 255 / 0.2);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: background 0.25s ease;
+}
+
+.btn-glass:hover {
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.24), rgb(255 255 255 / 0.1));
+}
+
+.btn-glass.on-media {
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.45), rgb(0 0 0 / 0.3));
+}
+
+.btn-glass.on-media:hover {
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.6), rgb(0 0 0 / 0.45));
+}
+
+.marker-highlight {
+  background-image: linear-gradient(100deg, transparent 2%, rgb(236 211 160 / 0.8) 4%, rgb(236 211 160 / 0.9) 92%, transparent 96%);
+  background-size: 100% 42%;
+  background-position: 0 88%;
+  background-repeat: no-repeat;
+  padding-inline: 0.08em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desk *,
+  .desk *::before,
+  .desk *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
