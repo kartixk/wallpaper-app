@@ -6,12 +6,12 @@ import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, useTexture } from "@react-three/drei";
 import { useAbout, type AboutContent } from "@/context/AboutContext";
-import { ON_MAT, PROPS } from "./layout";
+import { ON_MAT, PROPS, SUN } from "./layout";
 import { flight } from "./flight";
 import { TOOLS } from "../tools";
 import { ToolModel } from "../ToolCup";
-import { planFall, poseTool } from "./toolFall";
-import { BOOK_W, Sketchbook } from "./props/Sketchbook";
+import { planFall, poseTool, poseToolShadow, toolShadowTexture } from "./toolFall";
+import { BOOK_D, BOOK_W, Sketchbook } from "./props/Sketchbook";
 import { PAGE_PX, drawIndexPage, drawLeftPage, drawRightPage, drawToolsPage } from "./props/BookPages";
 import { cachedTexture, fontsReady } from "./props/canvas";
 
@@ -52,7 +52,8 @@ export default function FlyingBook({ slot }: Props) {
   return createPortal(
     <div aria-hidden className={`pointer-events-none fixed inset-0 z-40 ${active ? "" : "invisible"}`}>
       <Canvas
-        frameloop={active ? "always" : "never"}
+        // drawn only when something moves: scrolling, the leaf settling, the tools dropping
+        frameloop={active ? "demand" : "never"}
         // never below 1.5×: the thin pens and brushes lying on the page show stair-stepped edges on
         // GPUs that skip MSAA, and rendering above the screen's resolution smooths them anyway
         dpr={[1.5, 2]}
@@ -65,8 +66,8 @@ export default function FlyingBook({ slot }: Props) {
       >
         <Suspense fallback={null}>
           <Environment files="/desk/textures/studio_512.hdr" environmentIntensity={0.6} environmentRotation={[0, 1.2, 0]} />
-          <directionalLight position={[13, 15, 9]} intensity={2.7} color="#fff3e2" />
-          <Flight slot={slot} about={about} />
+          <directionalLight position={SUN} intensity={2.7} color="#fff3e2" />
+          <Flight slot={slot} about={about} active={active} />
         </Suspense>
       </Canvas>
     </div>,
@@ -74,25 +75,51 @@ export default function FlyingBook({ slot }: Props) {
   );
 }
 
-/** Once the page has landed on the index, the tools drop on their own clock (not the scroll's): this long each, staggered. */
-const DROP_SECONDS = 0.9;
-const DROP_STAGGER = 3; // × each tool's delay fraction, in seconds
-/** How far the page must have turned to trigger the drop, and to re-arm it again. */
+/**
+ * How far the page must have turned to throw the tools (they then land on their own clock, not
+ * the scroll's), and how far back it must go to re-arm the throw.
+ */
 const LANDED = 0.9;
 const REARM = 0.5;
 
+/** A soft start and finish, for the take-off: half the peak speed of the cubic below. */
+const sineInOut = (t: number) => (1 - Math.cos(Math.PI * t)) / 2;
 const easeInOut =(t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 const clamp01 = (t: number) => THREE.MathUtils.clamp(t, 0, 1);
 const smooth = THREE.MathUtils.smoothstep;
 
 const X_AXIS = new THREE.Vector3(1, 0, 0);
+/** Toward the light, in world space. */
+const TO_SUN = new THREE.Vector3(...SUN).normalize();
+/** The shut book's bounds in its own space, ribbon included: what must clear the hero before the overlay takes it. */
+const BOOK_CORNERS = [-1, 1].flatMap((x) =>
+  [0, 0.25].flatMap((y) => [-BOOK_D / 2, BOOK_D / 2 + 0.45].map((z) => new THREE.Vector3((x * BOOK_W) / 2, y, z))),
+);
+/**
+ * How quickly the book catches up with the scroll (per second). A wheel moves the page in
+ * jumps; reading progress off a smoothed scroll turns those into one glide.
+ */
+const SCROLL_EASE = 7;
 
-function Flight({ slot, about }: Props & { about: AboutContent }) {
+function Flight({ slot, about, active }: Props & { about: AboutContent; active: boolean }) {
   use(fontsReady());
+  const invalidate = useThree((s) => s.invalidate);
+  const smoothY = useRef<number | null>(null);
+  // the canvas draws on demand: every scroll asks for a frame
+  useEffect(() => {
+    if (!active) return;
+    const kick = () => invalidate();
+    kick();
+    window.addEventListener("scroll", kick, { passive: true });
+    return () => window.removeEventListener("scroll", kick);
+  }, [active, invalidate]);
   const book = useRef<THREE.Group>(null);
   const open = useRef(0);
   const turn = useRef(0);
   const tools = useRef<THREE.Group>(null);
+  const toolShadows = useRef<THREE.Group>(null);
+  const shadowMap = useMemo(() => toolShadowTexture(), []);
+  const shadowPlane = useMemo(() => new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), []);
   const plans = useMemo(() => planFall(), []);
   const drop = useRef({ start: -1 });
   const shadows = useRef({ slot: -1, spread: -1 });
@@ -152,11 +179,13 @@ function Flight({ slot, about }: Props & { about: AboutContent }) {
       standing: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -0.07, -0.38, "YZX")),
       // open: lying back a little, as if on a table in front of you
       lying: new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.2, 0, 0)),
+      light: new THREE.Vector3(),
+      inverse: new THREE.Quaternion(),
     }),
     [],
   );
 
-  useFrame(({ camera, size }) => {
+  useFrame(({ camera, size }, delta) => {
     const g = book.current;
     const src = flight.camera;
     const el = slot.current;
@@ -168,21 +197,28 @@ function Flight({ slot, about }: Props & { about: AboutContent }) {
     const cam = camera as THREE.PerspectiveCamera;
     const { width: hw, height: hh } = flight.size;
     const sy = window.scrollY;
+    // progress runs off the smoothed scroll; anything pinned to the page (camera, slots) off the real one
+    let ys = smoothY.current ?? sy;
+    ys = Math.abs(sy - ys) > size.height * 2 ? sy : THREE.MathUtils.damp(ys, sy, SCROLL_EASE, Math.min(delta, 1 / 30));
+    if (Math.abs(sy - ys) < 0.5) ys = sy;
+    else invalidate();
+    smoothY.current = ys;
     const tanHalf = Math.tan(THREE.MathUtils.degToRad(src.fov) / 2);
 
     // 1. progress along each leg: a leg ends when its slot sits mid-screen
     const a = el.getBoundingClientRect();
     const endA = Math.max(1, a.top + sy + a.height / 2 - size.height / 2);
-    const pA = clamp01(sy / endA);
+    const pA = clamp01(ys / endA);
     const b = flight.spread?.getBoundingClientRect();
     // the spread is pinned, so its own rect drifts while pinned: the book is centred when the pin's top reaches the page top
     const pin = flight.pin?.getBoundingClientRect();
     const endB = pin ? pin.top + sy : b ? b.top + sy + b.height / 2 - size.height / 2 : Infinity;
-    const pB = b ? clamp01((sy - endA) / Math.max(1, endB - endA)) : 0;
+    const pB = b ? clamp01((ys - endA) / Math.max(1, endB - endA)) : 0;
     // leg 3: pinned and lying open; the leaf turns over to the index mid-way, then it rests there
     const pinned = pin ? Math.max(1, pin.height - size.height) : 1;
-    const pC = pin ? clamp01((sy - endB) / pinned) : 0;
-    turn.current = easeInOut(smooth(pC, 0.1, 0.55));
+    const pC = pin ? clamp01((ys - endB) / pinned) : 0;
+    // where the leaf should be; the leaf itself (props/PageLeaf) springs after it like paper
+    turn.current = smooth(pC, 0.1, 0.55);
 
     // the moment the page has landed on the index spread, the tools drop, once, in real time;
     // turning back past the re-arm point puts them away so they drop again next time
@@ -193,10 +229,16 @@ function Flight({ slot, about }: Props & { about: AboutContent }) {
     if (d.start < 0 && turn.current >= LANDED) d.start = now;
     else if (d.start >= 0 && turn.current < REARM) d.start = -1;
     const since = d.start < 0 ? -1 : now - d.start;
+    const lastLands = Math.max(...plans.map((p) => p.delay + p.duration));
+    if (since >= 0 && since < lastLands) invalidate();
     if (tools.current) {
       tools.current.children.forEach((obj, i) => {
-        poseTool(obj, plans[i], clamp01((since - plans[i].delay * DROP_STAGGER) / DROP_SECONDS));
+        poseTool(obj, plans[i], since < 0 ? -1 : since - plans[i].delay);
       });
+      // their shadows on the page, cast by the same light (brought into the book's own space)
+      t.light.copy(TO_SUN).applyQuaternion(t.inverse.copy(g.quaternion).invert());
+      if (t.light.y < 0.3) t.light.setY(0.3).normalize(); // never stretched out to the horizon
+      toolShadows.current?.children.forEach((s, i) => poseToolShadow(s as THREE.Mesh, tools.current!.children[i], plans[i], t.light));
     }
     flight.progress = pA;
 
@@ -239,23 +281,36 @@ function Flight({ slot, about }: Props & { about: AboutContent }) {
     poseFor(a, BOOK_W, t.standing, t.slotPos, t.slotQuat);
     t.toward.copy(cam.position).sub(t.slotPos).normalize();
 
-    g.visible = pA > 0;
+    // over the desk, the book rides the hero's camera, which sways after the pointer on its own clock
+    if (pA > 0 && pB <= 0) invalidate();
     if (pB <= 0) {
       // leg 1: lift off the mat and arc toward the viewer on the way down to the manifesto
-      const e = easeInOut(pA);
+      const e = sineInOut(pA);
       const lift = Math.sin(Math.PI * e);
-      g.position.lerpVectors(start.pos, t.slotPos, e).addScaledVector(t.toward, lift * 2.2);
-      g.position.y += lift * 0.8;
-      t.roll.setFromAxisAngle(t.toward, lift * 0.5);
+      g.position.lerpVectors(start.pos, t.slotPos, e).addScaledVector(t.toward, lift * 1.3);
+      g.position.y += lift * 0.6;
+      t.roll.setFromAxisAngle(t.toward, lift * 0.35);
       g.quaternion.slerpQuaternions(start.quat, t.slotQuat, e).premultiply(t.roll);
       open.current = 0;
+      // still wholly over the hero? then the hero draws it, shadow and all (see props/RisingSketchbook)
+      let lowest = -Infinity;
+      for (const c of BOOK_CORNERS) {
+        t.y.copy(c).applyQuaternion(g.quaternion).add(g.position).project(cam);
+        lowest = Math.max(lowest, ((1 - t.y.y) / 2) * size.height);
+      }
+      flight.book.inHero = lowest < hh - sy - 2;
+      g.position.toArray(flight.book.pos);
+      g.quaternion.toArray(flight.book.quat);
     } else {
       // leg 2: glide down to the spread, settling back as it falls open
       const e = easeInOut(pB);
       g.position.lerpVectors(t.slotPos, t.spreadPos, e).addScaledVector(t.toward, Math.sin(Math.PI * e) * 1.2);
       g.quaternion.slerpQuaternions(t.slotQuat, t.spreadQuat, e);
       open.current = easeInOut(smooth(pB, 0.3, 0.97));
+      flight.book.inHero = false;
     }
+    // hidden only once the hero has really picked it up, so the hand-over never leaves a gap
+    g.visible = pA > 0 && !(flight.book.inHero && flight.book.heroHasBook);
 
     // soft shadows under each slot, faded in as the book arrives (only touch the DOM on change)
     const slotShadow = Math.round(pA * (1 - smooth(pB, 0, 0.15)) * 100) / 100;
@@ -275,6 +330,14 @@ function Flight({ slot, about }: Props & { about: AboutContent }) {
       <Sketchbook open={open} leftPage={leftPage} rightPage={rightPage} turn={turn} turnedPage={indexPage} nextPage={toolsPage}>
         {/* the tool cup, standing up off the right-hand page */}
         {/* the tools: loose, posed in book space; hidden until they are dropped */}
+        {/* the tools' shadows on the page, under the tools themselves */}
+        <group ref={toolShadows}>
+          {TOOLS.map((tool) => (
+            <mesh key={tool.id} geometry={shadowPlane} matrixAutoUpdate={false} visible={false} renderOrder={1}>
+              <meshBasicMaterial map={shadowMap} transparent depthWrite={false} polygonOffset polygonOffsetFactor={-2} toneMapped={false} />
+            </mesh>
+          ))}
+        </group>
         <group ref={tools}>
           {TOOLS.map((tool) => (
             <group key={tool.id}>

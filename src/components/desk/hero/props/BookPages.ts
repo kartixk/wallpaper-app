@@ -457,7 +457,7 @@ export function drawToolsPage(ctx: CanvasRenderingContext2D, w: number, h: numbe
     true,
   );
 
-  // handwritten nudge with an arrow curling down the page
+  // handwritten nudge
   ctx.save();
   ctx.translate(left, h * 0.36);
   ctx.rotate(-0.06);
@@ -465,19 +465,8 @@ export function drawToolsPage(ctx: CanvasRenderingContext2D, w: number, h: numbe
   ctx.font = `${w * 0.052}px ${f.marker}`;
   ctx.fillText("let's get to work!", 0, 0);
   ctx.restore();
-  ctx.strokeStyle = CLAY;
-  ctx.lineWidth = 6;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(w * 0.22, h * 0.4);
-  ctx.bezierCurveTo(w * 0.16, h * 0.46, w * 0.16, h * 0.54, w * 0.24, h * 0.6);
-  ctx.moveTo(w * 0.24, h * 0.6);
-  ctx.lineTo(w * 0.2, h * 0.585);
-  ctx.moveTo(w * 0.24, h * 0.6);
-  ctx.lineTo(w * 0.245, h * 0.555);
-  ctx.stroke();
 
-  // (the tools are 3D, dropped onto this page by hero/FlyingBook)
+  // (the tools are 3D, tossed onto this page by hero/FlyingBook)
 
   pageNumber(ctx, w, h, "09", "right");
 }

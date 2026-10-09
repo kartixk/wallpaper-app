@@ -26,24 +26,11 @@ export function WhatIDo() {
   }, []);
 
   return (
-    <section id="skills" className="surface-stone grain relative overflow-hidden px-6 py-28 md:px-12 md:py-14">
+    <section id="skills" className="surface-stone grain relative overflow-hidden px-6 py-28 md:py-0">
       <div className="mx-auto grid max-w-4xl items-center gap-10">
         {/* On larger screens the sketchbook (just above) carries the heading, the index and the
-            cup, so here only a row of shortcuts stays. Phones, where the page is too small to
-            read, keep the full section below it; screen readers get the heading either way. */}
-        <div className="hidden flex-wrap items-center justify-center gap-3 md:flex">
-          <span className="font-marker mr-2 text-smoke/80">jump to the work →</span>
-          {TOOLS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => openTool(t)}
-              className="btn-line rounded-full bg-paper/70 px-4 py-2 text-sm font-medium backdrop-blur transition-transform hover:-translate-y-0.5"
-            >
-              {t.discipline}
-            </button>
-          ))}
-        </div>
-
+            tools, so this section shows nothing there. Phones, where the page is too small to
+            read, keep the full section; screen readers get the heading either way. */}
         <div className="md:hidden">
           <SectionTag n="02">What I do</SectionTag>
           <h2 className="display mt-6 text-5xl md:text-7xl">

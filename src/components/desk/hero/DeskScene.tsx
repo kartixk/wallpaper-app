@@ -6,7 +6,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, PerformanceMonitor } from "@react-three/drei";
 import { Bloom, EffectComposer, N8AO, Noise, SMAA, ToneMapping, Vignette } from "@react-three/postprocessing";
 import { BlendFunction, ToneMappingMode } from "postprocessing";
-import { DESK, WALL_Z, layoutFor, type DeskLayout } from "./layout";
+import { DESK, SUN, WALL_Z, layoutFor, type DeskLayout } from "./layout";
 import { ArtWall, Desk, DeskProps } from "./props";
 import { flight } from "./flight";
 
@@ -194,7 +194,7 @@ function Lights() {
       <Environment files="/desk/textures/studio_512.hdr" environmentIntensity={0.6} environmentRotation={[0, 1.2, 0]} />
       {/* daylight from the window on the right: shadows rake left across the desk and up the wall */}
       <directionalLight
-        position={[13, 15, 9]}
+        position={SUN}
         intensity={2.7}
         color="#fff3e2"
         castShadow

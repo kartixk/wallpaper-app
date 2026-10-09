@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { RoundedBox, useTexture } from "@react-three/drei";
 import { cachedTexture, cssFont, fontsReady, grain, rng, useDispose } from "./canvas";
 import { drawBlankPage } from "./BookPages";
+import { TurningLeaf, gutterLift, makeShade, shadeMaterial } from "./PageLeaf";
 
 // A4-ish hardback: 22 × 30 cm, 2 cm thick
 const W = 2.2;
@@ -21,6 +22,7 @@ const PAGE_W = W - 0.02;
 
 /** The open spread is twice the cover's width; this is the cover width, in desk units. */
 export const BOOK_W = W;
+export const BOOK_D = D;
 
 const KRAFT = "#c4a073";
 
@@ -141,30 +143,16 @@ export function Sketchbook({ open, leftPage, rightPage, turn, turnedPage, nextPa
   const elastic = useRef<THREE.Group>(null);
   const leftMesh = useRef<THREE.Mesh>(null);
   const rightMesh = useRef<THREE.Mesh>(null);
-  const leaf = useRef<THREE.Group>(null);
-  const leafFront = useRef<THREE.Mesh>(null);
-  const leafBack = useRef<THREE.Mesh>(null);
+  // the shade the turning leaf casts on the pages under it
+  const shade = useMemo(() => ({ left: makeShade(1), right: makeShade(0) }), []);
   // R3F hands the geometry over after construction, so size the morph influences by hand
   useLayoutEffect(() => {
     leftMesh.current?.updateMorphTargets();
     rightMesh.current?.updateMorphTargets();
-    leafFront.current?.updateMorphTargets();
-    leafBack.current?.updateMorphTargets();
   }, [leftGeo, rightGeo]);
   useFrame(() => {
     const o = open?.current ?? 0;
     const bowOpen = THREE.MathUtils.smoothstep(o, 0.6, 1);
-    // the leaf: hinged on the spine like the cover, flat on the right until it is turned
-    const l = leaf.current;
-    if (l) {
-      const t = turn?.current ?? 0;
-      l.rotation.z = Math.PI * t;
-      l.visible = o > 0; // while the book is shut it is part of the block
-      // its pages bow with the book, the bow flipping over as the leaf does
-      const flip = Math.cos(Math.PI * t) * bowOpen;
-      if (leafFront.current?.morphTargetInfluences) leafFront.current.morphTargetInfluences[0] = flip;
-      if (leafBack.current?.morphTargetInfluences) leafBack.current.morphTargetInfluences[0] = -flip;
-    }
     if (front.current) front.current.rotation.z = Math.PI * o;
     // the elastic is slipped off over the edge first, then tucked out of sight under the back cover
     const slip = THREE.MathUtils.smoothstep(o, 0, 0.25);
@@ -182,9 +170,17 @@ export function Sketchbook({ open, leftPage, rightPage, turn, turnedPage, nextPa
   const block = <meshStandardMaterial map={pages} roughness={0.95} />;
   const kraft = <meshStandardMaterial color={KRAFT} roughness={0.9} />;
   const cloth = <meshStandardMaterial color="#5a3b2b" roughness={0.85} />;
-  const paperMat = (map: THREE.Texture) => (
-    <meshStandardMaterial map={map} emissive="#ffffff" emissiveMap={map} emissiveIntensity={0.22} roughness={0.92} />
+  const paperMat = (map: THREE.Texture, shaded?: (typeof shade)["left"]) => (
+    <meshStandardMaterial
+      map={map}
+      emissive="#ffffff"
+      emissiveMap={map}
+      emissiveIntensity={0.22}
+      roughness={0.92}
+      {...(shaded && shadeMaterial(shaded))}
+    />
   );
+  const turning = !!(turn && turnedPage);
 
   return (
     <group>
@@ -197,17 +193,20 @@ export function Sketchbook({ open, leftPage, rightPage, turn, turnedPage, nextPa
         {block}
       </mesh>
       <mesh ref={rightMesh} geometry={rightGeo} position={[-W / 2 + PAGE_W / 2, MID, 0]} rotation-x={-Math.PI / 2}>
-        {paperMat((turnedPage ? nextPage : undefined) ?? rightPage ?? blank)}
+        {paperMat((turning ? nextPage : undefined) ?? rightPage ?? blank, turning ? shade.right : undefined)}
       </mesh>
       {/* the page that turns: front is the old right-hand page, back the new left-hand one */}
-      {turnedPage && (
-        <group ref={leaf} position={[-W / 2, MID + LEAF_LIFT, 0]} visible={false}>
-          <mesh ref={leafFront} geometry={rightGeo} position-x={PAGE_W / 2} rotation-x={-Math.PI / 2}>
-            {paperMat(rightPage ?? blank)}
-          </mesh>
-          <mesh ref={leafBack} geometry={leftGeo} position-x={PAGE_W / 2} rotation={[-Math.PI / 2, Math.PI, 0]}>
-            {paperMat(turnedPage)}
-          </mesh>
+      {turning && (
+        <group position={[-W / 2, MID + LEAF_LIFT, 0]}>
+          <TurningLeaf
+            width={PAGE_W}
+            depth={D - 0.08}
+            turn={turn!}
+            open={open}
+            front={paperMat(rightPage ?? blank)}
+            back={paperMat(turnedPage!)}
+            shade={shade}
+          />
         </group>
       )}
       <RoundedBox args={[0.13, MID - 0.006, D + 0.004]} radius={0.04} smoothness={4} position={[-W / 2 + 0.05, (MID - 0.006) / 2, 0]}>
@@ -230,7 +229,7 @@ export function Sketchbook({ open, leftPage, rightPage, turn, turnedPage, nextPa
             </mesh>
             {/* the left-hand page faces down while shut, up once the cover has gone over */}
             <mesh ref={leftMesh} geometry={leftGeo} position-x={PAGE_W / 2 - W / 2} rotation={[-Math.PI / 2, Math.PI, 0]}>
-              {paperMat(leftPage ?? blank)}
+              {paperMat(leftPage ?? blank, turning ? shade.left : undefined)}
             </mesh>
             <RoundedBox args={[W, BOARD, D]} radius={0.01} smoothness={2} position-y={MID - BOARD / 2}>
               {kraft}
@@ -265,8 +264,7 @@ export function Sketchbook({ open, leftPage, rightPage, turn, turnedPage, nextPa
 
 /** Height of the open book's page surface at book-x, bowed up out of the gutter (matches `pageGeometry`). */
 export function pageHeightAt(x: number) {
-  const u = THREE.MathUtils.clamp(Math.abs(x + W / 2) / PAGE_W, 0, 1);
-  return MID + 0.07 * Math.pow(Math.max(0, Math.sin(Math.PI * Math.min(1, u * 1.15))), 0.7) * (1 - 0.55 * u);
+  return MID + gutterLift(THREE.MathUtils.clamp(Math.abs(x + W / 2) / PAGE_W, 0, 1));
 }
 
 /**
@@ -281,9 +279,7 @@ function pageGeometry(spineAt: "min" | "max") {
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i);
     const u = THREE.MathUtils.clamp(spineAt === "min" ? (x + pw / 2) / pw : (pw / 2 - x) / pw, 0, 1); // 0 at the spine
-    // (clamped: a sine a hair below zero at the edges would make the power NaN)
-    const lift = 0.07 * Math.pow(Math.max(0, Math.sin(Math.PI * Math.min(1, u * 1.15))), 0.7) * (1 - 0.55 * u);
-    bowed.set([x, p.getY(i), lift], i * 3);
+    bowed.set([x, p.getY(i), gutterLift(u)], i * 3);
   }
   g.morphAttributes.position = [new THREE.BufferAttribute(bowed, 3)];
   g.computeVertexNormals();

@@ -10,6 +10,8 @@
 export const DESK = { w: 13, d: 7.5 };
 /** The wall the desk is pushed against. */
 export const WALL_Z = -DESK.d / 2;
+/** Where the window's daylight comes from (the shadow-casting light), relative to the desk centre. */
+export const SUN: [x: number, y: number, z: number] = [13, 15, 9];
 /** Height of the cutting mat's surface, for things lying on it. */
 export const ON_MAT = 0.031;
 

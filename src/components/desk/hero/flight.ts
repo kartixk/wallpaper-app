@@ -17,6 +17,18 @@ export const flight = {
    * is centred; the scroll left in it, once the book has landed, turns the page to the index.
    */
   pin: null as HTMLElement | null,
+  /**
+   * The sketchbook's pose on its first leg, in the desk's world space (written by the overlay).
+   * While `inHero` the hero scene draws it, in the desk's own light, shadows and grading and
+   * scrolling in step with the desk; once it crosses the hero's bottom edge the overlay does.
+   * `heroHasBook` is whether the hero actually drew it this frame, so the hand-over never blinks.
+   */
+  book: {
+    pos: [0, 0, 0] as [number, number, number],
+    quat: [0, 0, 0, 1] as [number, number, number, number],
+    inHero: false,
+    heroHasBook: false,
+  },
   /** Set once the hero scene has compiled and faded in; READY_EVENT fires at the same time. */
   ready: false,
 };
@@ -36,3 +48,4 @@ export function afterDeskReady(fn: () => void) {
     (window.cancelIdleCallback ?? window.clearTimeout)(idle);
   };
 }
+
