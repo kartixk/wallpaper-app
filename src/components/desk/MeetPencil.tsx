@@ -16,7 +16,7 @@ export function MeetPencil() {
 
   return (
     // overflow-clip, not hidden: hidden would make this the scroll container and un-stick the book below
-    <section id="about" className="surface-paper grain relative overflow-clip px-6 pb-28 pt-32 md:px-12">
+    <section id="about" className="surface-paper grain relative overflow-clip px-6 pb-12 pt-32 md:px-12">
       <div className="mx-auto max-w-6xl">
         {/* the sketchbook flies down from the manifesto and falls open here (see hero/FlyingBook);
             its shadow fades in as it lands (--book: 0 → 1). It then stays pinned while the
@@ -29,7 +29,7 @@ export function MeetPencil() {
             };
           }}
           className="relative"
-          style={{ height: "200svh" }}
+          style={{ height: "1400svh" }}
         >
           <div className="sticky top-0 grid h-[100svh] place-items-center">
             <div

@@ -60,6 +60,8 @@ const ROOT_C = 2 * Math.sqrt(ROOT_K) * 0.85;
 // the free edge is springy paper: it trails while the leaf moves, then sways past and settles
 const BEND_K = 38;
 const BEND_C = 2 * Math.sqrt(BEND_K) * 0.2;
+/** How much extra damping the free edge gets once the leaf is lying on the page (× its usual). */
+const LAND_DAMP = 5;
 /** Air on the page's face: radians of trail per rad/s of swing. */
 const DRAG = 0.055;
 /** How much the root's acceleration throws the edge the other way. */
@@ -156,7 +158,9 @@ export function TurningLeaf({ width, depth, turn, open, front, back, shade }: Pr
       }
       const rootAcc = (s.av - av0) / dt;
       const sag = -GRAVITY * Math.sin(s.a) * Math.cos(s.a) - DRAG * s.av;
-      s.bv += (BEND_K * (sag - s.b) - BEND_C * s.bv - INERTIA * rootAcc) * dt;
+      // once it has come down on the page its edge is let to settle fast, rather than sway on for a while
+      const down = THREE.MathUtils.smoothstep(s.a, 2.6, Math.PI);
+      s.bv += (BEND_K * (sag - s.b) - BEND_C * (1 + LAND_DAMP * down) * s.bv - INERTIA * rootAcc) * dt;
       s.b = THREE.MathUtils.clamp(s.b + s.bv * dt, -1.4, 1.4);
     }
     const moving =

@@ -305,7 +305,30 @@ export function poseToolShadow(shadow: THREE.Mesh, tool: THREE.Object3D, plan: F
   across.multiplyScalar(GIRTH + 2 * blur);
   // sits on the highest point of the bowed page under it, so it never sinks into the paper
   const ends = (s: number) => pageHeightAt(mid.x + (along.x / 2) * s);
-  basis.makeBasis(along, THREE.Object3D.DEFAULT_UP, across).setPosition(mid.x, Math.max(ends(-1), ends(0), ends(1)) + 0.004, mid.z);
+  basis.makeBasis(along, THREE.Object3D.DEFAULT_UP, across).setPosition(mid.x, Math.max(ends(-1), ends(0), ends(1)) + 0.012, mid.z);
   shadow.matrix.copy(basis);
   (shadow.material as THREE.MeshBasicMaterial).opacity = 0.5 / (1 + 1.6 * h) ** 2;
+}
+
+/* ------------------------- leaving the page, for the next one ------------------------- */
+
+/** Which way the tools are swept (off the right-hand edge, a little up the page) and how far. */
+const EXIT_DIR = new THREE.Vector3(1, 0, -0.35).normalize();
+const EXIT_DIST = 3.6;
+/** Each tool sets off a little after the one before (fractions of the sweep, by tool). */
+const EXIT_STAGGER = [0, 0.15, 0.3, 0.45, 0.2, 0.1];
+
+/** How far through its leaving tool `i` is, when the sweep as a whole is `sweep` (0–1) through. */
+export const exitProgress = (i: number, sweep: number) => THREE.MathUtils.clamp(sweep * 1.6 - EXIT_STAGGER[i % EXIT_STAGGER.length], 0, 1);
+
+/** Slides a tool lying on the page off it: slowly at first, then away, lifting as it goes. Gone once `e` reaches 1. */
+export function exitTool(obj: THREE.Object3D, e: number) {
+  if (!obj.visible || e <= 0) return;
+  if (e >= 1) {
+    obj.visible = false;
+    return;
+  }
+  const k = e * e;
+  obj.position.addScaledVector(EXIT_DIR, k * EXIT_DIST);
+  obj.position.y += 0.5 * Math.sin(Math.PI * e) + 0.9 * k;
 }

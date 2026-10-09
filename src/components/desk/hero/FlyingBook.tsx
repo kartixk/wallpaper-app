@@ -9,11 +9,27 @@ import { useAbout, type AboutContent } from "@/context/AboutContext";
 import { ON_MAT, PROPS, SUN } from "./layout";
 import { flight } from "./flight";
 import { TOOLS } from "../tools";
-import { ToolModel } from "../ToolCup";
-import { planFall, poseTool, poseToolShadow, toolShadowTexture } from "./toolFall";
+import { TOOL_HEIGHT, ToolModel } from "../ToolCup";
+import { TOOL_SCALE, exitProgress, exitTool, planFall, poseTool, poseToolShadow, toolShadowTexture } from "./toolFall";
 import { BOOK_D, BOOK_W, Sketchbook } from "./props/Sketchbook";
-import { PAGE_PX, drawIndexPage, drawLeftPage, drawRightPage, drawToolsPage } from "./props/BookPages";
+import {
+  PAGE_PX,
+  drawIndexPage,
+  drawLeftPage,
+  drawRightPage,
+  CHAPTER_IDS,
+  drawChapterLeft,
+  drawChapterRight,
+  drawSketchLeft,
+  drawUnderlineStroke,
+  sketchUnderline,
+  drawSketchRight,
+  drawToolsPage,
+  pasteChapterPrints,
+  pasteSketchPrints,
+} from "./props/BookPages";
 import { cachedTexture, fontsReady } from "./props/canvas";
+import { WRITE_TOTAL, inkLayer, planWriter, poseWriter, rollPencilOut, setReveal } from "./underline";
 
 type Props = {
   /** Where the book first comes to rest beside the manifesto: a box with the cover's aspect ratio. */
@@ -38,7 +54,8 @@ export default function FlyingBook({ slot }: Props) {
   useEffect(() => {
     const update = () => {
       const r = (flight.spread ?? slot.current)?.getBoundingClientRect();
-      setActive(!r || r.bottom > -80);
+      // (not until the hanging ribbon and the shadow are clear too, or they would pop out of sight)
+      setActive(!r || r.bottom > -260);
     };
     update();
     window.addEventListener("scroll", update, { passive: true });
@@ -82,6 +99,45 @@ export default function FlyingBook({ slot }: Props) {
 const LANDED = 0.9;
 const REARM = 0.5;
 
+/** The tools sweep off the page over this stretch of the pin (it ends before the next leaf lifts). */
+const SWEEP: [from: number, to: number] = [0.1, 0.16];
+/**
+ * Once the next page has landed the pencil comes back to underline the title (in real time); turning
+ * back past the re-arm point rubs it out again.
+ */
+const WRITE_AT = 0.97;
+/** The page springs over after the scroll reaches it: the pencil waits this long (s) for it to land and be still. */
+const LAND_WAIT = 1.6;
+const WRITE_REARM = 0.6;
+/**
+ * Turning the page back: the pencil is gone from the gutter by the time the page has turned this
+ * far back (and it only starts to go once the page has lifted off the paper).
+ */
+const PAGE_BACK: [gone: number, resting: number] = [WRITE_REARM, 0.95];
+/**
+ * Each chapter has its tool, which comes back once its page has landed and draws the line under the
+ * title (the word it is under, and how far the sheet it draws on lies above the page beneath).
+ */
+const SCRIBES = [
+  { tool: "pencil", key: "sketch", word: "Sketches", lift: 0.007 },
+  { tool: "stylus", key: "digital", word: "Art", lift: 0.01 },
+  { tool: "wallbrush", key: "wall", word: "Art", lift: 0.013 },
+  { tool: "charcoal", key: "charcoal", word: "Portraits", lift: 0.016 },
+  { tool: "fineliner", key: "pen", word: "Sketches", lift: 0.019 },
+  { tool: "roundbrush", key: "watercolour", word: "colours", lift: 0.022 },
+] as const;
+/**
+ * Where in the pinned scroll (0–1) each chapter's page is turned to, one after another, and how long the
+ * turn takes. The first, Pencil Sketches, follows the page of tools; the rest are evenly spaced.
+ */
+const TURN_LEN = 0.035;
+const TURN_AT = SCRIBES.map((_, k) => (0.17 + k * 0.13));
+
+/** Sets where a leaf should be (a plain function, so the scene's frame loop may write to state objects). */
+function setTurn(ref: { current: number }, to: number) {
+  ref.current = to;
+}
+
 /** A soft start and finish, for the take-off: half the peak speed of the cubic below. */
 const sineInOut = (t: number) => (1 - Math.cos(Math.PI * t)) / 2;
 const easeInOut =(t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
@@ -89,6 +145,9 @@ const clamp01 = (t: number) => THREE.MathUtils.clamp(t, 0, 1);
 const smooth = THREE.MathUtils.smoothstep;
 
 const X_AXIS = new THREE.Vector3(1, 0, 0);
+/** How far the book leans back, and how much smaller it gets, as it scrolls away (radians; fraction). */
+const LEAN_AWAY = 0.3;
+const SHRINK_AWAY = 0.07;
 /** Toward the light, in world space. */
 const TO_SUN = new THREE.Vector3(...SUN).normalize();
 /** The shut book's bounds in its own space, ribbon included: what must clear the hero before the overlay takes it. */
@@ -116,12 +175,15 @@ function Flight({ slot, about, active }: Props & { about: AboutContent; active: 
   const book = useRef<THREE.Group>(null);
   const open = useRef(0);
   const turn = useRef(0);
+  // where each chapter's leaf should be (0 = on the right, 1 = turned over), set from the scroll
+  const [turnRefs] = useState(() => SCRIBES.map(() => ({ current: 0 })));
   const tools = useRef<THREE.Group>(null);
   const toolShadows = useRef<THREE.Group>(null);
   const shadowMap = useMemo(() => toolShadowTexture(), []);
   const shadowPlane = useMemo(() => new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), []);
   const plans = useMemo(() => planFall(), []);
   const drop = useRef({ start: -1 });
+  const write = useRef(SCRIBES.map(() => ({ start: -1 })));
   const shadows = useRef({ slot: -1, spread: -1 });
 
   // the two inside pages: the pasted-in illustration, and the Meet Pencil copy
@@ -137,6 +199,62 @@ function Flight({ slot, about, active }: Props & { about: AboutContent; active: 
   // the page that turns in after it: the index, facing the page the tools drop onto
   const indexPage = useMemo(() => cachedTexture("page-index", ...PAGE_PX, drawIndexPage), []);
   const toolsPage = useMemo(() => cachedTexture("page-tools", ...PAGE_PX, drawToolsPage), []);
+  // and the next chapter after that: Pencil Sketches, pages 01 and 02 (prints are pasted on as they load)
+  const sketchLeft = useMemo(() => cachedTexture("page-sketch-left:v2", ...PAGE_PX, drawSketchLeft), []);
+  const sketchRight = useMemo(() => cachedTexture("page-sketch-right:v2", ...PAGE_PX, drawSketchRight), []);
+  // the chapters after it: Digital Art (03, 04) and Wall Art (05, 06)
+  const chapterPages = useMemo(
+    () =>
+      CHAPTER_IDS.map((id) => ({
+        id,
+        left: cachedTexture(`page-${id}-left:v2`, ...PAGE_PX, (ctx, w, h) => drawChapterLeft(ctx, w, h, id)),
+        right: cachedTexture(`page-${id}-right:v2`, ...PAGE_PX, (ctx, w, h) => drawChapterRight(ctx, w, h, id)),
+      })),
+    [],
+  );
+  // the ochre underlines, drawn live: a strip of ink revealed along its length as the tool's tip moves
+  const scribes = useMemo(
+    () =>
+      SCRIBES.map((sc) => {
+        const underline = sketchUnderline(...PAGE_PX, sc.word);
+        const reveal = { value: 0 };
+        return {
+          ...sc,
+          index: TOOLS.findIndex((t) => t.id === sc.tool),
+          reveal,
+          writer: planWriter(underline, sc.lift, TOOL_HEIGHT[sc.tool] * TOOL_SCALE),
+          ink: inkLayer(
+            underline,
+            cachedTexture(`underline-stroke:${sc.key}`, Math.ceil(underline.box.w), Math.ceil(underline.box.h), (ctx) => drawUnderlineStroke(ctx, underline)),
+            reveal,
+          ),
+        };
+      }),
+    [],
+  );
+  const more = useMemo(
+    () => chapterPages.map((c, k) => ({ turn: turnRefs[k + 1], back: c.left, under: c.right, ink: scribes[k + 1].ink })),
+    [chapterPages, turnRefs, scribes],
+  );
+  useEffect(() => {
+    let alive = true;
+    for (const c of chapterPages) {
+      pasteChapterPrints(c.left, c.id, "left").then((changed) => changed && alive && invalidate());
+      pasteChapterPrints(c.right, c.id, "right").then((changed) => changed && alive && invalidate());
+    }
+    return () => {
+      alive = false;
+    };
+  }, [chapterPages, invalidate]);
+  useEffect(() => {
+    let alive = true;
+    for (const [tex, side] of [[sketchLeft, "left"], [sketchRight, "right"]] as const) {
+      pasteSketchPrints(tex, side).then((changed) => changed && alive && invalidate());
+    }
+    return () => {
+      alive = false;
+    };
+  }, [sketchLeft, sketchRight, invalidate]);
 
   // compile the book's shaders now, while it's hidden, not on the first frame it flies
   const get = useThree((s) => s.get);
@@ -174,6 +292,7 @@ function Flight({ slot, about, active }: Props & { about: AboutContent; active: 
       right: new THREE.Vector3(),
       basis: new THREE.Matrix4(),
       pitch: new THREE.Quaternion(),
+      depart: new THREE.Quaternion(),
       roll: new THREE.Quaternion(),
       // beside the manifesto: a slight turn so the spine shows, and a jaunty tilt
       standing: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -0.07, -0.38, "YZX")),
@@ -217,8 +336,13 @@ function Flight({ slot, about, active }: Props & { about: AboutContent; active: 
     // leg 3: pinned and lying open; the leaf turns over to the index mid-way, then it rests there
     const pinned = pin ? Math.max(1, pin.height - size.height) : 1;
     const pC = pin ? clamp01((ys - endB) / pinned) : 0;
+    // and once the pin is done and the page scrolls on: how far the book has gone (0 → 1 over most of a screen)
+    const pD = pin ? clamp01((ys - endB - pinned) / (size.height * 0.9)) : 0;
     // where the leaf should be; the leaf itself (props/PageLeaf) springs after it like paper
-    turn.current = smooth(pC, 0.1, 0.55);
+    turn.current = smooth(pC, 0.03, 0.09);
+    // …and later, with the tools lying on it, the next leaf turns over to the Pencil Sketches
+    // then, after a good while on each spread, the next chapter's page
+    SCRIBES.forEach((_, k) => setTurn(turnRefs[k], smooth(pC, TURN_AT[k], TURN_AT[k] + TURN_LEN)));
 
     // the moment the page has landed on the index spread, the tools drop, once, in real time;
     // turning back past the re-arm point puts them away so they drop again next time
@@ -231,14 +355,48 @@ function Flight({ slot, about, active }: Props & { about: AboutContent; active: 
     const since = d.start < 0 ? -1 : now - d.start;
     const lastLands = Math.max(...plans.map((p) => p.delay + p.duration));
     if (since >= 0 && since < lastLands) invalidate();
+    // the page after it is coming: the tools are swept off this one…
+    const sweep = smooth(pC, SWEEP[0], SWEEP[1]);
+    // …and once each chapter's page has landed, its tool comes back to underline the title
+    const turns = turnRefs;
+    const writings = scribes.map((_, k) => {
+      const w = write.current[k];
+      const landed = turns[k].current;
+      if (w.start < 0 && landed >= WRITE_AT) w.start = now + LAND_WAIT;
+      else if (w.start >= 0 && landed < WRITE_REARM) w.start = -1;
+      return w.start < 0 ? -1 : now - w.start;
+    });
+    if (writings.some((x) => x > -LAND_WAIT && x < WRITE_TOTAL)) invalidate();
+    // each tool, at rest in the middle of the book, rolls away when the next page lifts over it (the last
+    // one when the book is scrolled on from); and when its page is turned back it rolls out the same way
+    const leaving = scribes.map((_, k) => (k + 1 < scribes.length ? smooth(turnRefs[k + 1].current, 0, 0.3) : smooth(pC, 0.93, 0.99)));
+    const outs = scribes.map((_, k) => (writings[k] >= 0 ? Math.max(leaving[k], 1 - smooth(turns[k].current, PAGE_BACK[0], PAGE_BACK[1])) : 0));
     if (tools.current) {
       tools.current.children.forEach((obj, i) => {
         poseTool(obj, plans[i], since < 0 ? -1 : since - plans[i].delay);
+        if (sweep > 0) exitTool(obj, exitProgress(i, sweep));
+      });
+      scribes.forEach((sc, k) => {
+        const tool = tools.current!.children[sc.index];
+        setReveal(sc.reveal, poseWriter(tool, sc.writer, writings[k]));
+        if (outs[k] > 0) rollPencilOut(tool, outs[k]);
       });
       // their shadows on the page, cast by the same light (brought into the book's own space)
       t.light.copy(TO_SUN).applyQuaternion(t.inverse.copy(g.quaternion).invert());
       if (t.light.y < 0.3) t.light.setY(0.3).normalize(); // never stretched out to the horizon
-      toolShadows.current?.children.forEach((s, i) => poseToolShadow(s as THREE.Mesh, tools.current!.children[i], plans[i], t.light));
+      toolShadows.current?.children.forEach((s, i) => {
+        const shadow = s as THREE.Mesh;
+        poseToolShadow(shadow, tools.current!.children[i], plans[i], t.light);
+        // a tool being swept off takes its shadow with it. A tool that has come back to write is on the
+        // page again and keeps its own shadow until it is swept off in turn
+        const k = scribes.findIndex((sc) => sc.index === i);
+        const gone = k >= 0 && writings[k] >= 0 ? outs[k] : sweep > 0 ? exitProgress(i, sweep) : 0;
+        if (gone > 0) {
+          const keep = 1 - Math.min(1, gone * 3);
+          shadow.visible = shadow.visible && keep > 0;
+          (shadow.material as THREE.MeshBasicMaterial).opacity *= keep;
+        }
+      });
     }
     flight.progress = pA;
 
@@ -248,8 +406,12 @@ function Flight({ slot, about, active }: Props & { about: AboutContent; active: 
     cam.position.copy(src.position);
     cam.quaternion.copy(src.quaternion).multiply(t.pitch.setFromAxisAngle(X_AXIS, -straighten * Math.atan(below * tanHalf)));
     cam.fov = src.fov;
-    cam.near = src.near;
-    cam.far = src.far;
+    // the hero's near and far planes are wide (1 … 150); the book is never nearer than a few units, and the
+    // sheets of paper lie thousandths of a unit apart, so a tighter range keeps them from fighting over depth
+    // the hero's near and far planes are wide (1 … 150); the book is never nearer than a few units, and the
+    // sheets of paper lie thousandths of a unit apart, so a tighter range keeps them from fighting over depth
+    cam.near = Math.max(src.near, 5);
+    cam.far = Math.min(src.far, 80);
     cam.aspect = hw / hh;
     cam.setViewOffset(hw, hh, 0, THREE.MathUtils.lerp(sy, (hh - size.height) / 2, straighten), size.width, size.height);
     cam.updateProjectionMatrix();
@@ -283,6 +445,7 @@ function Flight({ slot, about, active }: Props & { about: AboutContent; active: 
 
     // over the desk, the book rides the hero's camera, which sways after the pointer on its own clock
     if (pA > 0 && pB <= 0) invalidate();
+    g.scale.setScalar(1);
     if (pB <= 0) {
       // leg 1: lift off the mat and arc toward the viewer on the way down to the manifesto
       const e = sineInOut(pA);
@@ -308,6 +471,10 @@ function Flight({ slot, about, active }: Props & { about: AboutContent; active: 
       g.quaternion.slerpQuaternions(t.slotQuat, t.spreadQuat, e);
       open.current = easeInOut(smooth(pB, 0.3, 0.97));
       flight.book.inHero = false;
+      // taking its leave: as the page scrolls on it leans back a little and draws away, rather than just riding up
+      const away = smooth(pD, 0, 1);
+      if (away > 0) g.quaternion.multiply(t.depart.setFromAxisAngle(X_AXIS, -LEAN_AWAY * away));
+      g.scale.setScalar(1 - SHRINK_AWAY * away);
     }
     // hidden only once the hero has really picked it up, so the hand-over never leaves a gap
     g.visible = pA > 0 && !(flight.book.inHero && flight.book.heroHasBook);
@@ -318,7 +485,7 @@ function Flight({ slot, about, active }: Props & { about: AboutContent; active: 
       shadows.current.slot = slotShadow;
       el.style.setProperty("--book", String(slotShadow));
     }
-    const spreadShadow = Math.round(smooth(pB, 0.8, 1) * 100) / 100;
+    const spreadShadow = Math.round(smooth(pB, 0.8, 1) * (1 - smooth(pD, 0, 0.8)) * 100) / 100;
     if (flight.spread && spreadShadow !== shadows.current.spread) {
       shadows.current.spread = spreadShadow;
       flight.spread.style.setProperty("--book", String(spreadShadow));
@@ -327,7 +494,7 @@ function Flight({ slot, about, active }: Props & { about: AboutContent; active: 
 
   return (
     <group ref={book} visible={false}>
-      <Sketchbook open={open} leftPage={leftPage} rightPage={rightPage} turn={turn} turnedPage={indexPage} nextPage={toolsPage}>
+      <Sketchbook open={open} leftPage={leftPage} rightPage={rightPage} turn={turn} turnedPage={indexPage} nextPage={toolsPage} turn2={turnRefs[0]} ink={scribes[0].ink} sketchLeft={sketchLeft} sketchRight={sketchRight} more={more}>
         {/* the tool cup, standing up off the right-hand page */}
         {/* the tools: loose, posed in book space; hidden until they are dropped */}
         {/* the tools' shadows on the page, under the tools themselves */}
