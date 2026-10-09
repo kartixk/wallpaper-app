@@ -53,7 +53,9 @@ export default function FlyingBook({ slot }: Props) {
     <div aria-hidden className={`pointer-events-none fixed inset-0 z-40 ${active ? "" : "invisible"}`}>
       <Canvas
         frameloop={active ? "always" : "never"}
-        dpr={[1, 2]}
+        // never below 1.5×: the thin pens and brushes lying on the page show stair-stepped edges on
+        // GPUs that skip MSAA, and rendering above the screen's resolution smooths them anyway
+        dpr={[1.5, 2]}
         gl={{ alpha: true, antialias: true }}
         onCreated={({ gl }) => {
           // match the hero's neutral tone mapping so the hand-over doesn't shift colour
@@ -154,7 +156,7 @@ function Flight({ slot, about }: Props & { about: AboutContent }) {
     [],
   );
 
-  useFrame(({ camera, size, clock }) => {
+  useFrame(({ camera, size }) => {
     const g = book.current;
     const src = flight.camera;
     const el = slot.current;
@@ -184,10 +186,13 @@ function Flight({ slot, about }: Props & { about: AboutContent }) {
 
     // the moment the page has landed on the index spread, the tools drop, once, in real time;
     // turning back past the re-arm point puts them away so they drop again next time
+    // (the browser's clock, not three's: that one is reset to zero each time the canvas is paused and
+    // resumed, which happens whenever the book scrolls away and back, and would hide the tools)
+    const now = performance.now() / 1000;
     const d = drop.current;
-    if (d.start < 0 && turn.current >= LANDED) d.start = clock.elapsedTime;
+    if (d.start < 0 && turn.current >= LANDED) d.start = now;
     else if (d.start >= 0 && turn.current < REARM) d.start = -1;
-    const since = d.start < 0 ? -1 : clock.elapsedTime - d.start;
+    const since = d.start < 0 ? -1 : now - d.start;
     if (tools.current) {
       tools.current.children.forEach((obj, i) => {
         poseTool(obj, plans[i], clamp01((since - plans[i].delay * DROP_STAGGER) / DROP_SECONDS));

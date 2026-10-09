@@ -368,7 +368,8 @@ function RoundBrush() {
         <cylinderGeometry args={[0.06, 0.07, 0.34, 24]} />
         <Metal />
       </mesh>
-      <mesh geometry={bristles} position={[0, 2.54, 0]}>
+      {/* the bristles start inside the ferrule, so there is no seam where they meet */}
+      <mesh geometry={bristles} position={[0, 2.48, 0]}>
         <meshStandardMaterial color="#3a352e" roughness={0.9} />
       </mesh>
     </group>

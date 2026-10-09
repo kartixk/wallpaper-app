@@ -23,14 +23,17 @@ const LANDING: Record<Tool["id"], [x: number, z: number, deg: number]> = {
   stylus: [0.38, 1.02, -9],
   charcoal: [0.58, 0.62, 68],
   fineliner: [-0.12, 1.25, 193],
-  roundbrush: [-2.0, 1.12, 6], // spills over the spine onto the left page's empty foot
+  roundbrush: [0.2, 0.06, -4], // right under the "let's get to work!" note
 };
 
 /** Book-x of the gutter, where the tools spring from (the spine of the open spread). */
 const GUTTER_X = -1.1;
 
+/** How far above the page a tool is when it first appears in the gutter. */
+const GUTTER_LIFT = 0.06;
+
 /** Radius of a tool lying on the page, so it rests on it rather than sinking in. */
-const REST = 0.04;
+const REST = 0.05;
 
 export type FallPlan = {
   /** Where it pops up: out of the gutter, in the middle of the spread. */
@@ -56,13 +59,17 @@ export function planFall(): FallPlan[] {
     const dir = new THREE.Vector3(Math.cos(yaw), 0, Math.sin(yaw));
     // tools stand on their base: lay it so the middle of the tool is at the landing spot
     const half = (TOOL_HEIGHT[tool.id] * TOOL_SCALE) / 2;
-    const pos = new THREE.Vector3(x - dir.x * half, pageHeightAt(x) + REST, z - dir.z * half);
+    // a tool lies flat, so it must clear the highest point of the bowed page along its whole length
+    const rest = Math.max(pageHeightAt(x - dir.x * half), pageHeightAt(x), pageHeightAt(x + dir.x * half)) + REST;
+    const pos = new THREE.Vector3(x - dir.x * half, rest, z - dir.z * half);
     const quat = new THREE.Quaternion().setFromUnitVectors(up, dir);
     quat.premultiply(new THREE.Quaternion().setFromAxisAngle(dir, r() * Math.PI * 2));
     const sx = GUTTER_X + 0.1 + r() * 0.35;
     const sz = -0.25 + r() * 0.8;
     return {
-      from: new THREE.Vector3(sx, pageHeightAt(sx), sz),
+      // it comes up from just above the page, not out of it: a thin handle on the surface itself
+      // would be half-buried (and cut off by the page bowing up beside it)
+      from: new THREE.Vector3(sx, Math.max(pageHeightAt(sx), pageHeightAt(sx + 0.6)) + REST + GUTTER_LIFT, sz),
       hop: 0.8 + r() * 0.5,
       pos,
       quat,
