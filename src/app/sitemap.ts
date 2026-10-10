@@ -1,9 +1,10 @@
 import type { MetadataRoute } from "next";
+import { WORK, slugOf } from "@/components/desk/data";
 
 const SITE_URL = "https://abishek-pencil.vercel.app";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const routes = ["", "/gallery", "/explore", "/pencil"];
+  const routes = ["", "/gallery", "/explore", "/pencil", "/desk", ...WORK.map((c) => `/desk/${slugOf(c.title)}`)];
 
   return routes.map((route) => ({
     url: `${SITE_URL}${route}`,

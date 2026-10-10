@@ -4,7 +4,7 @@ export const EMAIL = "challaabi12@gmail.com";
 
 export const NAV_LINKS = [
   { label: "About", href: "#about" },
-  { label: "Work", href: "#work" },
+  { label: "Work", href: "/desk" },
   { label: "Wall Art", href: "#wall-art" },
   { label: "Reel", href: "#reel" },
   { label: "Contact", href: "#contact" },
@@ -56,3 +56,14 @@ export const WALL_ART_VIDEOS = [
     instagramUrl: "https://www.instagram.com/reel/DZJnRCfRHuY/?utm_source=ig_web_copy_link&igsi=MzRlODBiNWFlZA==",
   },
 ];
+
+/** URL-safe name for a work category: "Acrylic & Pen" → "acrylic-and-pen". */
+export const slugOf = (title: string) =>
+  title
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+
+/** Where a medium's work lives: its own page, or the whole board when it has no category of its own. */
+export const workHref = (category?: string) => (category && WORK.some((c) => c.title === category) ? `/desk/${slugOf(category)}` : "/desk");

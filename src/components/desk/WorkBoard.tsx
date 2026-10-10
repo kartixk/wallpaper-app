@@ -5,8 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, ExternalLink, X } from "lucide-react";
-import { INSTAGRAM_URL, WORK } from "./data";
+import { INSTAGRAM_URL, WORK, workHref } from "./data";
 import { Scribble, SectionTag, Tape } from "./Pencil";
+import { FILTER_EVENT } from "./tools";
 
 interface Piece {
   src: string;
@@ -18,9 +19,20 @@ const ALL_PIECES: Piece[] = WORK.flatMap((c) => c.images.map((src) => ({ src, ca
 // deterministic "pinned by hand" tilt per card
 const tilt = (i: number) => ((i * 37) % 7) - 3;
 
-export function WorkBoard() {
-  const [filter, setFilter] = useState(ALL);
+export function WorkBoard({ initialFilter = ALL, syncUrl = false, children }: { initialFilter?: string; syncUrl?: boolean; children?: React.ReactNode } = {}) {
+  const [filter, setFilter] = useState(initialFilter);
   const [open, setOpen] = useState<number | null>(null);
+
+  // the sketchbook's "view more" (and the tools) send the visitor here, to the medium they were looking at
+  useEffect(() => {
+    const onFilter = (e: Event) => {
+      const wanted = (e as CustomEvent<string>).detail;
+      setFilter(WORK.some((c) => c.title === wanted) ? wanted : ALL);
+      setOpen(null);
+    };
+    window.addEventListener(FILTER_EVENT, onFilter);
+    return () => window.removeEventListener(FILTER_EVENT, onFilter);
+  }, []);
 
   const pieces = useMemo(
     () => (filter === ALL ? ALL_PIECES : ALL_PIECES.filter((p) => p.category === filter)),
@@ -52,7 +64,11 @@ export function WorkBoard() {
                 key={t}
                 role="tab"
                 aria-selected={active}
-                onClick={() => setFilter(t)}
+                onClick={() => {
+                  setFilter(t);
+                  // on its own page, the address follows the tab, so any view can be shared or bookmarked
+                  if (syncUrl) window.history.replaceState(null, "", workHref(t === ALL ? undefined : t));
+                }}
                 className={`rounded-full px-4 py-2 text-sm font-medium transition-all ${
                   active
                     ? "bg-gradient-to-b from-white to-[#f3ece0] text-ink shadow-[0_1px_0_white_inset,0_8px_20px_-6px_rgba(0,0,0,0.6)]"
@@ -116,6 +132,7 @@ export function WorkBoard() {
             Get his art as wallpapers →
           </Link>
         </div>
+        {children}
       </div>
 
       <Lightbox pieces={pieces} index={open} onChange={setOpen} />

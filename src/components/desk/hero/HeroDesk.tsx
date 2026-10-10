@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { READY_EVENT, flight } from "./flight";
 import { ArrowDown, Play } from "lucide-react";
 
@@ -41,9 +42,9 @@ export function HeroDesk() {
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 pb-6 md:px-10 md:pb-10">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 md:flex-row md:items-end md:justify-end">
           <div className="pointer-events-auto flex flex-wrap justify-center gap-3">
-            <a href="#work" className="btn-ink inline-flex items-center gap-2 rounded-full px-6 py-3 font-medium">
+            <Link href="/desk" className="btn-ink inline-flex items-center gap-2 rounded-full px-6 py-3 font-medium">
               See the work <ArrowDown size={18} />
-            </a>
+            </Link>
             <a
               href="#reel"
               className="btn-line inline-flex items-center gap-2 rounded-full bg-paper/70 px-6 py-3 font-medium backdrop-blur"

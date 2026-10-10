@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useLayoutEffect, useMemo, useRef } from "react";
+import { use, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { RoundedBox, useTexture } from "@react-three/drei";
@@ -77,6 +77,13 @@ export const LEAF_W = PAGE_W;
 export const LEAF_D = D - 0.08;
 /** Book-x of the spine, where the leaves are hinged. */
 export const SPINE_X = -W / 2;
+
+/** Records how a leaf is (a plain function, so a leaf's frame loop may write to the book's bookkeeping). */
+function setLeafState(st: { a: number; b: number; tw: number }, a: number, b: number, tw: number) {
+  st.a = a;
+  st.b = b;
+  st.tw = tw;
+}
 
 export function Sketchbook({
   open,
@@ -195,6 +202,12 @@ export function Sketchbook({
   // the shade each further leaf casts on whatever lies under it (leaf i+2 casts shades[i])
   const shades = useMemo(() => Array.from({ length: 8 }, () => ({ left: makeShade(1), right: makeShade(0) })), []);
   const moreRefs = useRef<(THREE.Group | null)[]>([]);
+  // how each leaf is right now, so the one under it can keep clear of it (leaf i is states[i])
+  const [states] = useState(() => Array.from({ length: 9 }, () => ({ a: 0, b: 0, tw: 0 })));
+  const stack = (i: number) => ({
+    above: i > 0 ? () => states[i - 1] : undefined,
+    onState: (a: number, b: number, tw: number) => setLeafState(states[i], a, b, tw),
+  });
   const leaf2 = useRef<THREE.Group>(null);
   // R3F hands the geometry over after construction, so size the morph influences by hand
   useLayoutEffect(() => {
@@ -272,6 +285,7 @@ export function Sketchbook({
             front={paperMat(rightPage ?? blank)}
             back={paperMat(turnedPage!, turning2 ? shade2.left : undefined)}
             shade={shade}
+            {...stack(0)}
           />
         </group>
       )}
@@ -286,6 +300,7 @@ export function Sketchbook({
             front={paperMat(nextPage ?? blank, shade.right)}
             back={paperMat(sketchLeft!, chain.length ? shades[0].left : undefined, ink)}
             shade={shade2}
+            {...stack(1)}
           />
         </group>
       )}
@@ -305,6 +320,7 @@ export function Sketchbook({
             front={paperMat(k ? chain[k - 1].under : sketchRight!, k ? shades[k - 1].right : shade2.right)}
             back={paperMat(m.back, k + 1 < chain.length ? shades[k + 1].left : undefined, m.ink)}
             shade={shades[k]}
+            {...stack(k + 2)}
           />
         </group>
       ))}

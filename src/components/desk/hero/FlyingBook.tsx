@@ -14,6 +14,7 @@ import { TOOL_SCALE, exitProgress, exitTool, planFall, poseTool, poseToolShadow,
 import { BOOK_D, BOOK_W, Sketchbook } from "./props/Sketchbook";
 import {
   PAGE_PX,
+  VIEW_MORE,
   drawIndexPage,
   drawLeftPage,
   drawRightPage,
@@ -29,7 +30,9 @@ import {
   pasteSketchPrints,
 } from "./props/BookPages";
 import { cachedTexture, fontsReady } from "./props/canvas";
-import { WRITE_TOTAL, inkLayer, planWriter, poseWriter, rollPencilOut, setReveal } from "./underline";
+import { WRITE_TOTAL, inkLayer, rightPageToBook, planWriter, poseWriter, rollPencilOut, setReveal } from "./underline";
+import { useRouter } from "next/navigation";
+import { workHref } from "../data";
 
 type Props = {
   /** Where the book first comes to rest beside the manifesto: a box with the cover's aspect ratio. */
@@ -48,6 +51,12 @@ type Props = {
  */
 export default function FlyingBook({ slot }: Props) {
   const { about } = useAbout();
+  const buttons = useRef<(HTMLButtonElement | null)[]>([]);
+  const router = useRouter();
+  // the pages the buttons lead to are fetched ahead, so the click lands instantly
+  useEffect(() => {
+    for (const t of TOOLS) router.prefetch(workHref(t.category));
+  }, [router]);
 
   // stop rendering (and hide the last frame) once the book's last stop has scrolled away above
   const [active, setActive] = useState(true);
@@ -67,6 +76,7 @@ export default function FlyingBook({ slot }: Props) {
   }, [slot]);
 
   return createPortal(
+    <>
     <div aria-hidden className={`pointer-events-none fixed inset-0 z-40 ${active ? "" : "invisible"}`}>
       <Canvas
         // drawn only when something moves: scrolling, the leaf settling, the tools dropping
@@ -84,10 +94,28 @@ export default function FlyingBook({ slot }: Props) {
         <Suspense fallback={null}>
           <Environment files="/desk/textures/studio_512.hdr" environmentIntensity={0.6} environmentRotation={[0, 1.2, 0]} />
           <directionalLight position={SUN} intensity={2.7} color="#fff3e2" />
-          <Flight slot={slot} about={about} active={active} />
+          <Flight slot={slot} about={about} active={active} buttons={buttons} />
         </Suspense>
       </Canvas>
-    </div>,
+    </div>
+    {/* each chapter's "view more": an invisible button laid over the label printed on its page (see Flight) */}
+    <div className={`pointer-events-none fixed inset-0 z-40 ${active ? "" : "invisible"}`}>
+      {SCRIBES.map((sc, k) => (
+        <button
+          key={sc.key}
+          ref={(el) => {
+            buttons.current[k] = el;
+          }}
+          type="button"
+          tabIndex={-1}
+          aria-label={`View more ${TOOLS[k].discipline} on its own page`}
+          onClick={() => router.push(workHref(TOOLS[k].category))}
+          className="absolute left-0 top-0 rounded-full bg-transparent opacity-0 outline-none transition-[opacity,background-color] duration-300 hover:bg-[#d4a24c]/10 focus-visible:ring-2 focus-visible:ring-[#d4a24c]"
+          style={{ pointerEvents: "none", cursor: "pointer" }}
+        />
+      ))}
+    </div>
+    </>,
     document.body,
   );
 }
@@ -133,6 +161,23 @@ const SCRIBES = [
 const TURN_LEN = 0.035;
 const TURN_AT = SCRIBES.map((_, k) => (0.17 + k * 0.13));
 
+/** Lays a button over the given screen box (or hides it): plain function, so the frame loop may touch the DOM. */
+function placeButton(el: HTMLButtonElement | null, box: { x: number; y: number; w: number; h: number } | null) {
+  if (!el) return;
+  if (!box) {
+    el.style.opacity = "0";
+    el.style.pointerEvents = "none";
+    el.tabIndex = -1;
+    return;
+  }
+  el.style.transform = `translate(${box.x}px, ${box.y}px)`;
+  el.style.width = `${box.w}px`;
+  el.style.height = `${box.h}px`;
+  el.style.opacity = "1";
+  el.style.pointerEvents = "auto";
+  el.tabIndex = 0;
+}
+
 /** Sets where a leaf should be (a plain function, so the scene's frame loop may write to state objects). */
 function setTurn(ref: { current: number }, to: number) {
   ref.current = to;
@@ -160,7 +205,7 @@ const BOOK_CORNERS = [-1, 1].flatMap((x) =>
  */
 const SCROLL_EASE = 7;
 
-function Flight({ slot, about, active }: Props & { about: AboutContent; active: boolean }) {
+function Flight({ slot, about, active, buttons }: Props & { about: AboutContent; active: boolean; buttons: React.RefObject<(HTMLButtonElement | null)[]> }) {
   use(fontsReady());
   const invalidate = useThree((s) => s.invalidate);
   const smoothY = useRef<number | null>(null);
@@ -184,6 +229,8 @@ function Flight({ slot, about, active }: Props & { about: AboutContent; active: 
   const plans = useMemo(() => planFall(), []);
   const drop = useRef({ start: -1 });
   const write = useRef(SCRIBES.map(() => ({ start: -1 })));
+  // when each chapter's page became the one on show (so its button waits for the page to stop swinging)
+  const shownSince = useRef(SCRIBES.map(() => 0));
   const shadows = useRef({ slot: -1, spread: -1 });
 
   // the two inside pages: the pasted-in illustration, and the Meet Pencil copy
@@ -200,15 +247,15 @@ function Flight({ slot, about, active }: Props & { about: AboutContent; active: 
   const indexPage = useMemo(() => cachedTexture("page-index", ...PAGE_PX, drawIndexPage), []);
   const toolsPage = useMemo(() => cachedTexture("page-tools", ...PAGE_PX, drawToolsPage), []);
   // and the next chapter after that: Pencil Sketches, pages 01 and 02 (prints are pasted on as they load)
-  const sketchLeft = useMemo(() => cachedTexture("page-sketch-left:v2", ...PAGE_PX, drawSketchLeft), []);
-  const sketchRight = useMemo(() => cachedTexture("page-sketch-right:v2", ...PAGE_PX, drawSketchRight), []);
+  const sketchLeft = useMemo(() => cachedTexture("page-sketch-left:v4", ...PAGE_PX, drawSketchLeft), []);
+  const sketchRight = useMemo(() => cachedTexture("page-sketch-right:v4", ...PAGE_PX, drawSketchRight), []);
   // the chapters after it: Digital Art (03, 04) and Wall Art (05, 06)
   const chapterPages = useMemo(
     () =>
       CHAPTER_IDS.map((id) => ({
         id,
-        left: cachedTexture(`page-${id}-left:v2`, ...PAGE_PX, (ctx, w, h) => drawChapterLeft(ctx, w, h, id)),
-        right: cachedTexture(`page-${id}-right:v2`, ...PAGE_PX, (ctx, w, h) => drawChapterRight(ctx, w, h, id)),
+        left: cachedTexture(`page-${id}-left:v4`, ...PAGE_PX, (ctx, w, h) => drawChapterLeft(ctx, w, h, id)),
+        right: cachedTexture(`page-${id}-right:v4`, ...PAGE_PX, (ctx, w, h) => drawChapterRight(ctx, w, h, id)),
       })),
     [],
   );
@@ -291,6 +338,7 @@ function Flight({ slot, about, active }: Props & { about: AboutContent; active: 
       z: new THREE.Vector3(),
       right: new THREE.Vector3(),
       basis: new THREE.Matrix4(),
+      pt: new THREE.Vector3(),
       pitch: new THREE.Quaternion(),
       depart: new THREE.Quaternion(),
       roll: new THREE.Quaternion(),
@@ -485,6 +533,30 @@ function Flight({ slot, about, active }: Props & { about: AboutContent; active: 
       shadows.current.slot = slotShadow;
       el.style.setProperty("--book", String(slotShadow));
     }
+    // each chapter's "view more": a button laid over the label printed on its page (it follows the book)
+    g.updateMatrixWorld(true);
+    const nowMs = performance.now();
+    SCRIBES.forEach((_, k) => {
+      const onShow = turnRefs[k].current >= 0.97 && (k + 1 >= SCRIBES.length || turnRefs[k + 1].current <= 0.02) && g.visible && pD < 0.2;
+      const since = shownSince.current;
+      if (!onShow) since[k] = 0;
+      else if (!since[k]) since[k] = nowMs;
+      if (!onShow || nowMs - since[k] < 1100) return placeButton(buttons.current[k], null);
+      let x0 = Infinity;
+      let y0 = Infinity;
+      let x1 = -Infinity;
+      let y1 = -Infinity;
+      for (const [fx, fy] of [[VIEW_MORE.x, VIEW_MORE.y], [VIEW_MORE.x + VIEW_MORE.w, VIEW_MORE.y], [VIEW_MORE.x, VIEW_MORE.y + VIEW_MORE.h], [VIEW_MORE.x + VIEW_MORE.w, VIEW_MORE.y + VIEW_MORE.h]]) {
+        rightPageToBook(fx * PAGE_PX[0], fy * PAGE_PX[1], k + 2 < 8 && k + 1 < SCRIBES.length ? 0.0035 - 0.0005 * (k + 2) : 0, t.pt).applyMatrix4(g.matrixWorld).project(cam);
+        const px = ((t.pt.x + 1) / 2) * size.width;
+        const py = ((1 - t.pt.y) / 2) * size.height;
+        x0 = Math.min(x0, px);
+        y0 = Math.min(y0, py);
+        x1 = Math.max(x1, px);
+        y1 = Math.max(y1, py);
+      }
+      placeButton(buttons.current[k], { x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+    });
     const spreadShadow = Math.round(smooth(pB, 0.8, 1) * (1 - smooth(pD, 0, 0.8)) * 100) / 100;
     if (flight.spread && spreadShadow !== shadows.current.spread) {
       shadows.current.spread = spreadShadow;

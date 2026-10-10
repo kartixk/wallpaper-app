@@ -210,3 +210,15 @@ export function rollPencilOut(obj: THREE.Object3D, e: number) {
   obj.quaternion.premultiply(SPIN.setFromAxisAngle(DEPTH_AXIS, -d / ROLL_RADIUS));
   obj.scale.multiplyScalar(1 - THREE.MathUtils.smoothstep(e, 0.8, 1));
 }
+
+/** A point on a chapter's left-hand page (its picture's pixels) in book space, on the sheet lying `lift` above the page beneath. */
+export function pageToBook(px: number, py: number, lift: number, out: THREE.Vector3) {
+  const x = pageX(px);
+  return out.set(x, surfaceY(x, lift), pageZ(py));
+}
+
+/** A point on a chapter's right-hand page (its picture's pixels) in book space, on the sheet lying `lift` above the bowed page. */
+export function rightPageToBook(px: number, py: number, lift: number, out: THREE.Vector3) {
+  const x = SPINE_X + (px / PW) * LEAF_W;
+  return out.set(x, pageHeightAt(x) + lift, pageZ(py));
+}

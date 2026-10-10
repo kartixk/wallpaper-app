@@ -546,7 +546,7 @@ export function drawSketchRight(ctx: CanvasRenderingContext2D, w: number, h: num
   const f = fonts();
 
   ctx.save();
-  ctx.translate(w * 0.42, h * 0.945);
+  ctx.translate(w * 0.08, h * 0.945);
   ctx.rotate(-0.04);
   ctx.fillStyle = CLAY;
   ctx.font = `${w * 0.036}px ${f.marker}`;
@@ -555,7 +555,7 @@ export function drawSketchRight(ctx: CanvasRenderingContext2D, w: number, h: num
 
   ctx.strokeStyle = "rgba(60,58,54,0.45)";
   ctx.lineWidth = 3;
-  star(ctx, w * 0.9, h * 0.1, w * 0.018);
+  drawViewMore(ctx, w, h);
 
   pageNumber(ctx, w, h, "02", "right");
 }
@@ -861,7 +861,7 @@ export function drawChapterRight(ctx: CanvasRenderingContext2D, w: number, h: nu
   paper(ctx, w, h, "left", c.seed + 2);
   const f = fonts();
   ctx.save();
-  ctx.translate(w * 0.42, h * 0.945);
+  ctx.translate(w * 0.08, h * 0.945);
   ctx.rotate(-0.04);
   ctx.fillStyle = CLAY;
   ctx.font = `${w * 0.036}px ${f.marker}`;
@@ -888,7 +888,7 @@ export function drawChapterRight(ctx: CanvasRenderingContext2D, w: number, h: nu
   }
   ctx.strokeStyle = "rgba(60,58,54,0.45)";
   ctx.lineWidth = 3;
-  star(ctx, w * 0.9, h * 0.1, w * 0.018);
+  drawViewMore(ctx, w, h);
   pageNumber(ctx, w, h, String(Number(c.n) + 1).padStart(2, "0"), "right");
 }
 
@@ -971,4 +971,46 @@ export async function pasteChapterPrints(tex: CanvasTexture, id: ChapterId, side
   tex.userData.printed = true;
   tex.needsUpdate = true;
   return true;
+}
+
+/* ------------------------------ "view more" on each chapter ------------------------------ */
+
+/** Where the label sits on a chapter's right-hand page, as fractions of the page: its click area too. */
+export const VIEW_MORE = { x: 0.56, y: 0.895, w: 0.3, h: 0.08 };
+
+/** A hand-lettered "view more →" with a pencilled underline, in the bottom right-hand corner of the page. */
+function drawViewMore(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const f = fonts();
+  const right = (VIEW_MORE.x + VIEW_MORE.w) * w - w * 0.01;
+  const base = (VIEW_MORE.y + VIEW_MORE.h * 0.62) * h;
+  ctx.save();
+  ctx.translate(right, base);
+  ctx.rotate(-0.045);
+  ctx.fillStyle = CLAY;
+  ctx.font = `${w * 0.038}px ${f.marker}`;
+  ctx.textAlign = "right";
+  const arrow = w * 0.05;
+  ctx.fillText("view more", -arrow, 0);
+  const tw = ctx.measureText("view more").width;
+  ctx.textAlign = "left";
+  // a little pencilled arrow after it
+  ctx.strokeStyle = CLAY;
+  ctx.lineWidth = 5;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(-arrow * 0.8, -w * 0.011);
+  ctx.bezierCurveTo(-arrow * 0.5, -w * 0.016, -arrow * 0.2, -w * 0.012, 0, -w * 0.012);
+  ctx.moveTo(-w * 0.014, -w * 0.024);
+  ctx.lineTo(0, -w * 0.012);
+  ctx.lineTo(-w * 0.015, 0);
+  ctx.stroke();
+  // underline
+  ctx.strokeStyle = OCHRE;
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(-arrow - tw, w * 0.012);
+  ctx.bezierCurveTo(-arrow - tw * 0.7, w * 0.006, -arrow - tw * 0.35, w * 0.016, -arrow, w * 0.008);
+  ctx.stroke();
+  ctx.restore();
 }

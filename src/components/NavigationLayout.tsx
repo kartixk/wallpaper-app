@@ -10,7 +10,8 @@ export function NavigationLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isPencilPage = pathname === "/pencil";
 
-  const isRootPage = pathname === "/";
+  // the portfolio's own pages (home, and the work pages under /desk) bring their own navigation
+  const isRootPage = pathname === "/" || pathname === "/desk" || pathname.startsWith("/desk/");
   const hideTopNav = isPencilPage || isRootPage;
 
   return (

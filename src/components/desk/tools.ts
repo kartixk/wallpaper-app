@@ -27,3 +27,9 @@ export function openTool(tool: Tool) {
     document.querySelector(tool.anchor)?.scrollIntoView({ behavior: "smooth" });
   }
 }
+
+/** Take the visitor to "Fresh off the desk", showing this tool's medium (everything, for a medium with no board of its own). */
+export function openWork(tool: Tool) {
+  window.dispatchEvent(new CustomEvent(FILTER_EVENT, { detail: tool.category ?? "All" }));
+  document.getElementById("work")?.scrollIntoView({ behavior: "smooth" });
+}

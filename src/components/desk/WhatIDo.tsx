@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { ArrowUpRight } from "lucide-react";
 import { Scribble, SectionTag } from "./Pencil";
 import { TOOLS, openTool, type Tool } from "./tools";
+import { workHref } from "./data";
 
 const ToolCup = dynamic(() => import("./ToolCup"), {
   ssr: false,
@@ -13,6 +15,9 @@ const ToolCup = dynamic(() => import("./ToolCup"), {
 
 export function WhatIDo() {
   const [active, setActive] = useState<Tool["id"] | null>(null);
+  const router = useRouter();
+  // a tool leads to its medium's own page; Wall Art, which has a section of its own on this page, scrolls to it
+  const open = (t: Tool) => (t.anchor ? openTool(t) : router.push(workHref(t.category)));
   const stageRef = useRef<HTMLDivElement>(null);
   const [inView, setInView] = useState(false);
 
@@ -48,7 +53,7 @@ export function WhatIDo() {
                   onMouseLeave={() => setActive(null)}
                   onFocus={() => setActive(t.id)}
                   onBlur={() => setActive(null)}
-                  onClick={() => openTool(t)}
+                  onClick={() => open(t)}
                   className={`group flex w-full items-center justify-between py-3.5 text-left transition-colors ${
                     active === t.id ? "text-ink" : "text-ink/70"
                   }`}
@@ -72,7 +77,7 @@ export function WhatIDo() {
         <div ref={stageRef} className="relative h-[440px] sm:h-[520px] md:hidden">
           {/* soft pool of lamp light under the cup */}
           <div aria-hidden className="absolute inset-x-[10%] bottom-[6%] top-[20%] rounded-full bg-[radial-gradient(closest-side,rgba(255,250,240,0.9),rgba(255,250,240,0))]" />
-          {inView && <ToolCup active={active} onActive={setActive} onSelect={openTool} running={inView} />}
+          {inView && <ToolCup active={active} onActive={setActive} onSelect={open} running={inView} />}
           <p className="font-marker pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 text-center text-lg text-smoke/80">
             {TOOLS.find((t) => t.id === active)?.discipline ?? "go on, pull one out ↑"}
           </p>
